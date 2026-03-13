@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Google credentials (NEVER commit these)
+credentials.json
+token.json
+service_account.json
+*.json
+!package.json
+
+# Environment
+.env
+
+# IDE
+.vscode/
+.idea/

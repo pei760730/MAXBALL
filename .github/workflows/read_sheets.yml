@@ -1,0 +1,60 @@
+name: Read Google Sheets
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/github-google-sheets-integration-O0Qww
+    paths:
+      - '.github/workflows/read_sheets.yml'
+      - 'trigger.txt'
+
+jobs:
+  read-sheets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/github-google-sheets-integration-O0Qww
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install gspread google-auth
+
+      - name: Create service account file
+        run: echo '${{ secrets.GOOGLE_SERVICE_ACCOUNT }}' > service_account.json
+
+      - name: Read all sheets and save
+        run: |
+          python3 << 'PYEOF'
+          import gspread, json
+          from google.oauth2.service_account import Credentials
+
+          SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+          creds = Credentials.from_service_account_file("service_account.json", scopes=SCOPES)
+          client = gspread.authorize(creds)
+
+          SHEET_URL = "https://docs.google.com/spreadsheets/d/1s_Q1BrR-TcOF00vSyR0kPp0jVKuzeq85UfoDB2JS928/edit"
+          spreadsheet = client.open_by_url(SHEET_URL)
+
+          all_data = {}
+          for ws in spreadsheet.worksheets():
+              print(f"Reading: {ws.title}")
+              all_data[ws.title] = ws.get_all_values()
+
+          with open("sheets_data.json", "w", encoding="utf-8") as f:
+              json.dump(all_data, f, ensure_ascii=False, indent=2)
+
+          print("Done! Saved to sheets_data.json")
+          PYEOF
+
+      - name: Commit and push data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add sheets_data.json
+          git commit -m "Auto-update: read Google Sheets data" || echo "No changes"
+          git push
