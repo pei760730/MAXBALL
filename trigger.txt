@@ -1,1 +1,1 @@
-trigger read sheets
+trigger: 2026-04-04 08:19:23 - retry with raw json secret
