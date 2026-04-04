@@ -28,13 +28,15 @@ from salary_calculator import SalaryConfig, AttendanceRecord, calculate_salary, 
 # ──────────────────────────────────────────────────────────────
 # Google Sheets URL 設定（請替換成你的 Sheet URL）
 # ──────────────────────────────────────────────────────────────
-SHEET_URL = "https://docs.google.com/spreadsheets/d/你的SHEET_ID/edit"
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1s_Q1BrR-TcOF00vSyR0kPp0jVKuzeq85UfoDB2JS928/edit"
 
-# 各工作表名稱（依你的 Google Sheet 分頁名稱填寫）
-TAB_MEAL       = "便當訂購"    # 每月便當打勾表
-TAB_EMPLOYEE   = "員工設定"    # 薪資核定資料（固定，不常變動）
-TAB_ATTENDANCE = "出勤記錄"    # 每月出勤輸入
-TAB_SALARY_OUT = "薪資明細"    # 計算結果輸出（程式自動寫入）
+# 各工作表名稱
+# 注意：現有分頁（核定/出勤/明細/總表）是鄧志展單人舊格式，保留不動
+# 以下是新增的全員多人分頁
+TAB_MEAL       = "便當訂購"    # 每月便當打勾表（全員）
+TAB_EMPLOYEE   = "員工設定"    # 薪資核定資料（全員，固定不常變動）
+TAB_ATTENDANCE = "月出勤"      # 每月出勤輸入（全員）
+TAB_SALARY_OUT = "薪資結算"    # 計算結果輸出（程式自動寫入，全員）
 
 CREDENTIALS_FILE = "service_account.json"
 

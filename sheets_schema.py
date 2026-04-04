@@ -10,7 +10,7 @@ Google Sheets 分頁結構初始化
 注意：執行前請先在 main_sync.py 中設定正確的 SHEET_URL。
 """
 
-from main_sync import SHEET_URL, CREDENTIALS_FILE
+from main_sync import SHEET_URL, CREDENTIALS_FILE  # URL 已設定在 main_sync.py
 from sheets_client import connect, write_rows
 
 # ──────────────────────────────────────────────────────────────
@@ -99,26 +99,26 @@ def setup_all_tabs(with_examples: bool = True):
 
     print("建立分頁結構 ...")
 
-    # 員工設定
+    # 員工設定（全員）
     ws_emp = _get_or_create_tab(spreadsheet, "員工設定")
     ws_emp.clear()
     data = EMPLOYEE_HEADER + (EMPLOYEE_EXAMPLE if with_examples else [])
     write_rows(ws_emp, data, start_row=1)
 
-    # 出勤記錄
-    ws_att = _get_or_create_tab(spreadsheet, "出勤記錄")
+    # 月出勤（全員）
+    ws_att = _get_or_create_tab(spreadsheet, "月出勤")
     ws_att.clear()
     data = ATTENDANCE_HEADER + (ATTENDANCE_EXAMPLE if with_examples else [])
     write_rows(ws_att, data, start_row=1)
 
-    # 便當訂購
+    # 便當訂購（全員）
     ws_meal = _get_or_create_tab(spreadsheet, "便當訂購")
     ws_meal.clear()
     data = MEAL_NOTE + MEAL_HEADER + (MEAL_EXAMPLE if with_examples else [])
     write_rows(ws_meal, data, start_row=1)
 
-    # 薪資明細
-    ws_sal = _get_or_create_tab(spreadsheet, "薪資明細")
+    # 薪資結算（全員，程式自動寫入）
+    ws_sal = _get_or_create_tab(spreadsheet, "薪資結算")
     ws_sal.clear()
     write_rows(ws_sal, SALARY_HEADER, start_row=1)
 
@@ -126,11 +126,17 @@ def setup_all_tabs(with_examples: bool = True):
     print("  ┌─────────────┬──────────────────────────────────────┐")
     print("  │ 分頁名稱    │ 說明                                 │")
     print("  ├─────────────┼──────────────────────────────────────┤")
-    print("  │ 員工設定    │ 薪資核定資料（固定，不常變動）       │")
-    print("  │ 出勤記錄    │ 每月出勤輸入（事假/加班/特休等）     │")
-    print("  │ 便當訂購    │ 每月打V/素/X（同現在的紙本表格）     │")
-    print("  │ 薪資明細    │ 自動計算輸出（程式寫入，勿手動改）   │")
+    print("  │ 核定        │ 舊格式（鄧志展單人，保留不動）       │")
+    print("  │ 出勤        │ 舊格式（鄧志展單人，保留不動）       │")
+    print("  │ 明細        │ 舊格式（鄧志展單人，保留不動）       │")
+    print("  │ 總表        │ 舊格式（鄧志展單人，保留不動）       │")
+    print("  ├─────────────┼──────────────────────────────────────┤")
+    print("  │ 員工設定 ★  │ 全員薪資核定資料（固定，不常變動）   │")
+    print("  │ 月出勤   ★  │ 每月全員出勤輸入（事假/加班/特休）   │")
+    print("  │ 便當訂購 ★  │ 每月打V/素/X（同現在的紙本表格）     │")
+    print("  │ 薪資結算 ★  │ 自動計算輸出（程式寫入，勿手動改）   │")
     print("  └─────────────┴──────────────────────────────────────┘")
+    print("  ★ = 新增分頁（舊分頁保留，不影響現有資料）")
     if with_examples:
         print("\n  ※ 已填入範例資料，確認格式後請替換為真實員工資料")
     print("\n下一步：")
