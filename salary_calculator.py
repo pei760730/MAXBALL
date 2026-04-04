@@ -173,13 +173,14 @@ def calculate_salary(
     )
 
     # ── 3. 假日加班費（週六休息日，1 倍工資 + 1 倍加給）──
-    daily_wage = (config.base_salary + config.duty_allowance) / 30
+    # 時薪基準 = (本薪 + 職務津貼 + 職務加給) ÷ 30 ÷ 8
+    hourly_base = (config.base_salary + config.duty_allowance + config.other_allowance) / 30 / 8
     result.holiday_overtime_pay = round(
-        daily_wage * attendance.holiday_overtime_days * 2
+        hourly_base * 8 * attendance.holiday_overtime_days * 2
     )
 
     # ── 4. 延時加班費（時薪 × 倍率）──
-    hourly_wage = daily_wage / 8
+    hourly_wage = hourly_base
     result.overtime_pay_1 = round(hourly_wage * OVERTIME_RATE_1 * attendance.overtime_hours_1)
     result.overtime_pay_2 = round(hourly_wage * OVERTIME_RATE_2 * attendance.overtime_hours_2)
 
@@ -275,11 +276,11 @@ def demo():
     from meal_tracker import EmployeeMealRecord
 
     config = SalaryConfig(
-        employee_id="11",
+        employee_id="30",
         name="鄧志展",
-        base_salary=27_000,
-        duty_allowance=13_500,
-        other_allowance=7_108,
+        base_salary=16_350,
+        duty_allowance=7_950,
+        other_allowance=2_850,
         full_attendance_bonus=1_600,
         labor_insurance_base=45_800,
         health_insurance_base=60_800,
@@ -289,13 +290,13 @@ def demo():
 
     attendance = AttendanceRecord(
         year=2026,
-        month=2,
-        calendar_days=28,
-        work_days=14,
-        actual_work_days=16.375,
-        holiday_overtime_days=2.375,
-        overtime_hours_1=30,
-        overtime_hours_2=38,
+        month=3,
+        calendar_days=31,
+        work_days=21,
+        actual_work_days=21.0,
+        holiday_overtime_days=4.0,   # 4個週六
+        overtime_hours_1=50.0,       # 前段 1.33倍
+        overtime_hours_2=60.0,       # 後段 1.66倍
         has_festival_bonus=False,
     )
 
