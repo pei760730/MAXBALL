@@ -36,9 +36,9 @@ LABOR_INSURANCE_EMPLOYEE_RATE = 0.1100   # 勞保員工負擔比率 11%（含就
 HEALTH_INSURANCE_EMPLOYEE_RATE = 0.05   # 健保員工負擔比率 5%（含補充保費）
 PENSION_EMPLOYER_RATE = 0.06             # 退休金雇主提撥 6%（員工自提另計）
 
-# 加班費倍率
-OVERTIME_RATE_1 = 1.3333   # 前 2 小時 1⅓ 倍
-OVERTIME_RATE_2 = 1.6667   # 後 2 小時 1⅔ 倍
+# 加班費倍率（正確版）
+OVERTIME_RATE_1 = 1.33   # 前 2 小時 1.33 倍
+OVERTIME_RATE_2 = 1.66   # 第 3 小時起 1.66 倍
 
 
 @dataclass
