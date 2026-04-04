@@ -1,0 +1,48 @@
+name: 同步 Google Sheets
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: '執行動作'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all          # 建立分頁 + 員工清單 + 便當資料（第一次完整執行）
+          - schema       # 只建立分頁結構
+          - employees    # 只寫入員工設定
+          - meal         # 只寫入便當訂購
+          - sync         # 計算薪資並寫回
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 取得程式碼
+        uses: actions/checkout@v4
+        with:
+          ref: claude/salary-meal-system-S9Ubj
+
+      - name: 安裝 Python 套件
+        run: pip install gspread google-auth
+
+      - name: 還原 service_account.json
+        run: |
+          echo "${{ secrets.GOOGLE_SERVICE_ACCOUNT }}" | base64 -d > service_account.json
+
+      - name: 建立分頁結構
+        if: ${{ inputs.action == 'all' || inputs.action == 'schema' }}
+        run: python sheets_schema.py
+
+      - name: 寫入員工設定
+        if: ${{ inputs.action == 'all' || inputs.action == 'employees' }}
+        run: python seed_employees.py
+
+      - name: 寫入 2026/3 便當訂購資料
+        if: ${{ inputs.action == 'all' || inputs.action == 'meal' }}
+        run: python seed_meal_march2026.py
+
+      - name: 計算薪資並寫回
+        if: ${{ inputs.action == 'sync' }}
+        run: python main_sync.py --year 2026 --month 3
