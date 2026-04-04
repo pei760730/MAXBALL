@@ -34,7 +34,7 @@ jobs:
 
       - name: 還原 service_account.json
         run: |
-          echo "${{ secrets.GOOGLE_SERVICE_ACCOUNT }}" | base64 -d > service_account.json
+          echo '${{ secrets.GOOGLE_SERVICE_ACCOUNT }}' > service_account.json
 
       - name: 建立分頁結構
         if: ${{ github.event_name == 'push' || inputs.action == 'all' || inputs.action == 'schema' }}
