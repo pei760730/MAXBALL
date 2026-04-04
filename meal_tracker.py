@@ -24,9 +24,9 @@ from dataclasses import dataclass, field
 from sheets_client import connect, open_sheet_by_url, read_all, write_rows, update_cell
 
 
-# 便當單價設定
-MEAL_PRICE_NORMAL = 70   # 普通便當每份價格（元）
-MEAL_PRICE_VEG    = 70   # 素食便當每份價格（元）
+# 便當扣款設定（午餐，公司補貼大部分，員工只負擔 15 元）
+MEAL_PRICE_NORMAL = 15   # 普通便當員工自付（元）
+MEAL_PRICE_VEG    = 15   # 素食便當員工自付（元）
 
 
 @dataclass
