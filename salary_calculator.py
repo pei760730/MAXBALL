@@ -58,8 +58,9 @@ class SalaryConfig:
     pension_base: float             # 退休金投保薪資
     pension_self_contribute: bool = False   # 是否自提 6%
     meal_exempt: bool = False               # 不訂便當（不扣便當費）
+    health_dependents: int = 0             # 健保眷屬人數（計算健保費用）
     holiday_overtime_daily: float = 0.0    # 假日加班固定日費（0 = 由時薪基準自動計算）
-    daily_work_allowance: float = DAILY_WORK_ALLOWANCE  # 出勤加給/天（預設 260）
+    daily_work_allowance: float = 0.0      # 出勤加給/天（員工個別設定）
 
 
 @dataclass
@@ -210,9 +211,9 @@ def calculate_salary(
         config.labor_insurance_base * LABOR_INSURANCE_RATE
     )
 
-    # ── 9. 健保費（員工自付 1.551% = 5.17% × 30%）──
+    # ── 9. 健保費（員工自付 = 投保薪資 × 5.17% × (1+眷屬) × 30%）──
     result.health_insurance_fee = round(
-        config.health_insurance_base * HEALTH_INSURANCE_RATE
+        config.health_insurance_base * 0.0517 * (1 + config.health_dependents) * 0.30
     )
 
     # ── 10. 退休金自提 6%（公式：IF(出勤天 = 應出勤天, 1, 出勤天/30) × 投保薪 × 6%）──
@@ -299,6 +300,7 @@ def demo():
         position_allowance=17_850,      # 職務加給（月額）
         overtime_hourly_base=194,       # 時薪基準（194×1.33=258, 194×1.66=322）
         holiday_overtime_daily=2_450,   # 週六加班日費（鐵律）
+        daily_work_allowance=260,       # 出勤加給260元/天
         meal_exempt=True,               # 鄧志展不訂便當，永遠不扣便當費
         full_attendance_bonus=1_600,
         labor_insurance_base=45_800,
@@ -334,5 +336,50 @@ def demo():
     return result
 
 
+def demo_xu_bo_kai():
+    """許柏凱 2026年3月薪資（22平日全勤，無加班，22份便當）"""
+    from meal_tracker import EmployeeMealRecord
+
+    config = SalaryConfig(
+        employee_id="13",
+        name="許柏凱",
+        base_salary=14_100,
+        duty_allowance=2_700,
+        other_allowance=4_800,          # 其他加給固定部分
+        position_allowance=9_500,       # 職務加給
+        overtime_hourly_base=136,       # 136×1.33=181, 136×1.66=226
+        holiday_overtime_daily=1_719,   # 假日加班日費（2hr×181+6hr×226=1,718≈1,719）
+        daily_work_allowance=175,       # 出勤加給175元/天（60+30+40+45）
+        full_attendance_bonus=1_600,
+        labor_insurance_base=30_300,
+        health_insurance_base=30_300,
+        health_dependents=2,            # 2眷屬 → 健保×3人
+        pension_base=30_300,
+        pension_self_contribute=False,
+    )
+
+    attendance = AttendanceRecord(
+        year=2026,
+        month=3,
+        calendar_days=31,
+        work_days=22,
+        actual_work_days=22.0,          # 22平日全勤
+        holiday_overtime_days=0.0,      # 無週六加班
+        overtime_hours_1=0.0,
+        overtime_hours_2=0.0,
+        leave_instances=0,
+    )
+
+    meal = EmployeeMealRecord(name="許柏凱", normal_count=22)
+    result = calculate_salary(config, attendance, meal)
+    result.print_detail()
+    return result
+
+
 if __name__ == "__main__":
+    print("=" * 50)
+    print("鄧志展")
     demo()
+    print("=" * 50)
+    print("許柏凱")
+    demo_xu_bo_kai()
