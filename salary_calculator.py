@@ -1,28 +1,22 @@
 """
-薪資計算模組
+薪資計算模組（公司鐵律版）
 
-功能：
-- 讀取員工薪資基本設定（本薪、職務津貼、全勤獎金等）
-- 讀取出勤資料（加班時數、假日加班、事病假等）
-- 自動扣除便當費用
-- 計算勞保、健保、退休金自提
-- 產生薪資明細並可寫回 Google Sheets
+【收入公式】
+  本薪        = 本薪月額 ÷ 30 × 月曆天數
+  職務津貼    = 職務津貼月額 ÷ 30 × 月曆天數
+  其他加給    = 固定加給 + 實際出班天數 × 260（含週六）
+  全勤獎金    = 1,600（每次請假扣 300，最多扣至 0）
+  假日加班費  = 2,450 × 週六加班天數（或依時薪基準計算）
+  前段加班費  = 時薪基準 × 1.33（取整數）× 加班小時
+  後段加班費  = 時薪基準 × 1.66（取整數）× 加班小時
+  職務加給    = 固定月額（請假依小時或天數比例扣除）
 
-薪資組成：
-  【收入項目】
-    本薪（按出勤日數比例給付）
-    職務津貼（按出勤日數比例給付）
-    其他加給
-    全勤獎金（全勤且無無薪假才給付）
-    假日加班費（週六休息日）
-    延時加班費（1.33 倍、1.66 倍）
-    節金（春節、端午、中秋）
-
-  【扣除項目】
-    勞工保險費（員工自付部分）
-    全民健康保險費（員工自付部分）
-    新制退休金自提（6%，若有選擇自提）
-    便當費（每月訂購份數 × 單價）
+【扣除公式】
+  勞保費      = 勞保投保薪資 × 2.5%（員工自付）
+  健保費      = 健保投保薪資 × 1.551%（員工自付 = 5.17% × 30%）
+  退休金自提  = 退休金投保薪資 × 6%（若選擇自提）
+  福利金      = min(應領合計 × 1%, 350)
+  便當費      = 訂購份數 × 15 元（僅中午）
 """
 
 from dataclasses import dataclass, field
@@ -30,53 +24,63 @@ from meal_tracker import EmployeeMealRecord, MEAL_PRICE_NORMAL, MEAL_PRICE_VEG
 
 
 # ──────────────────────────────────────────────
-# 勞健保費率（2025 年適用，可依年度調整）
+# 公司固定費率（鐵律）
 # ──────────────────────────────────────────────
-LABOR_INSURANCE_EMPLOYEE_RATE = 0.1100   # 勞保員工負擔比率 11%（含就業保險）
-HEALTH_INSURANCE_EMPLOYEE_RATE = 0.05   # 健保員工負擔比率 5%（含補充保費）
-PENSION_EMPLOYER_RATE = 0.06             # 退休金雇主提撥 6%（員工自提另計）
+OVERTIME_RATE_1 = 1.33          # 前段加班倍率
+OVERTIME_RATE_2 = 1.66          # 後段加班倍率
 
-# 加班費倍率（正確版）
-OVERTIME_RATE_1 = 1.33   # 前 2 小時 1.33 倍
-OVERTIME_RATE_2 = 1.66   # 第 3 小時起 1.66 倍
+LABOR_INSURANCE_RATE   = 0.0250  # 勞保 員工自付 2.5%（總費率12.5% × 員工負擔20%）
+HEALTH_INSURANCE_RATE  = 0.01551 # 健保 員工自付 1.551%（費率5.17% × 員工負擔30%）
+PENSION_EMPLOYEE_RATE  = 0.06    # 退休金自提 6%
+WELFARE_FUND_RATE      = 0.01    # 福利金 1%
+WELFARE_FUND_MAX       = 350     # 福利金最多扣 350 元
+DAILY_WORK_ALLOWANCE   = 260     # 出勤加給（每實際出班日，含週六）
 
 
+# ──────────────────────────────────────────────
+# 資料結構
+# ──────────────────────────────────────────────
 @dataclass
 class SalaryConfig:
     """
-    員工薪資核定設定（從「核定」工作表讀取）
+    員工薪資核定設定（從「員工設定」工作表讀取）
     """
     employee_id: str
     name: str
-    base_salary: float         # 本薪（月）
-    duty_allowance: float      # 職務津貼（月）
-    other_allowance: float     # 其他加給（月）
-    full_attendance_bonus: float  # 全勤獎金
-    labor_insurance_base: float   # 勞保投保薪資
-    health_insurance_base: float  # 健保投保薪資
-    pension_base: float           # 退休金投保薪資
-    pension_self_contribute: bool = False  # 是否自提 6%
+    base_salary: float              # 本薪月額
+    duty_allowance: float           # 職務津貼月額
+    other_allowance: float          # 其他加給（固定部分）
+    position_allowance: float       # 職務加給（固定月額，請假比例扣除）
+    overtime_hourly_base: float     # 時薪基準（= 前段率/1.33 = 後段率/1.66）
+    full_attendance_bonus: float    # 全勤獎金月額（通常 1,600）
+    labor_insurance_base: float     # 勞保投保薪資
+    health_insurance_base: float    # 健保投保薪資
+    pension_base: float             # 退休金投保薪資
+    pension_self_contribute: bool = False   # 是否自提 6%
+    holiday_overtime_daily: float = 0.0    # 假日加班固定日費（0 = 由時薪基準自動計算）
+    daily_work_allowance: float = DAILY_WORK_ALLOWANCE  # 出勤加給/天（預設 260）
 
 
 @dataclass
 class AttendanceRecord:
     """
-    員工出勤記錄（從「出勤」工作表讀取）
+    員工出勤記錄（從「月出勤」工作表讀取）
     """
     year: int
     month: int
-    calendar_days: int          # 當月曆日數
-    work_days: int              # 法定工作日數
-    actual_work_days: float     # 實際出勤日數
-    holiday_overtime_days: float = 0.0   # 假日加班日數（週六/休息日）
-    sunday_overtime_days: float  = 0.0   # 例假日加班日數
-    overtime_hours_1: float = 0.0        # 延時加班前段時數（1.33 倍）
-    overtime_hours_2: float = 0.0        # 延時加班後段時數（1.66 倍）
-    unpaid_leave_days: float = 0.0       # 無薪假日數
-    sick_leave_days: float = 0.0         # 病假日數（半薪）
-    personal_leave_days: float = 0.0     # 事假日數（無薪）
-    annual_leave_days: float = 0.0       # 特休日數（有薪）
-    has_festival_bonus: bool = False     # 當月是否有節金
+    calendar_days: int              # 當月曆天數（1月31、2月28/29…）
+    work_days: int                  # 法定工作日數（平日 Mon-Fri）
+    actual_work_days: float         # 實際出班天數（含週六加班日）
+    holiday_overtime_days: float = 0.0  # 週六/休息日 加班天數
+    sunday_overtime_days: float = 0.0   # 例假日（週日/國定） 加班天數
+    overtime_hours_1: float = 0.0   # 平日延時前段加班時數（1.33 倍）
+    overtime_hours_2: float = 0.0   # 平日延時後段加班時數（1.66 倍）
+    leave_instances: int = 0        # 請假次數（用於扣全勤獎金，每次 -300）
+    unpaid_leave_days: float = 0.0  # 無薪假日數
+    sick_leave_days: float = 0.0    # 病假日數（半薪）
+    personal_leave_days: float = 0.0    # 事假日數（無薪）
+    annual_leave_days: float = 0.0  # 特休日數（有薪）
+    has_festival_bonus: bool = False    # 當月是否有節金
 
 
 @dataclass
@@ -86,46 +90,49 @@ class SalaryResult:
     """
     name: str
     # 收入
-    base_pay: float = 0.0
-    duty_pay: float = 0.0
-    other_pay: float = 0.0
-    full_attendance_bonus: float = 0.0
-    holiday_overtime_pay: float = 0.0
-    overtime_pay_1: float = 0.0
-    overtime_pay_2: float = 0.0
-    festival_bonus: float = 0.0
-    gross_income: float = 0.0
+    base_pay: float = 0.0           # 本薪（月曆天比例）
+    duty_pay: float = 0.0           # 職務津貼（月曆天比例）
+    other_pay: float = 0.0          # 其他加給（固定＋出班天 × 260）
+    position_pay: float = 0.0       # 職務加給（固定月額）
+    full_attendance_bonus: float = 0.0  # 全勤獎金
+    holiday_overtime_pay: float = 0.0   # 假日加班費（週六）
+    overtime_pay_1: float = 0.0     # 延時加班費（1.33 倍）
+    overtime_pay_2: float = 0.0     # 延時加班費（1.66 倍）
+    festival_bonus: float = 0.0     # 節金
+    gross_income: float = 0.0       # 應領合計
 
     # 扣除
-    labor_insurance_fee: float = 0.0
-    health_insurance_fee: float = 0.0
-    pension_self: float = 0.0
-    meal_deduction: float = 0.0
-    total_deduction: float = 0.0
+    labor_insurance_fee: float = 0.0    # 勞保費
+    health_insurance_fee: float = 0.0   # 健保費
+    pension_self: float = 0.0           # 退休金自提
+    welfare_deduction: float = 0.0      # 福利金
+    meal_deduction: float = 0.0         # 便當費
+    total_deduction: float = 0.0        # 扣除合計
 
     # 實領
     net_salary: float = 0.0
 
     def print_detail(self):
-        """列印薪資明細"""
         print(f"\n{'='*50}")
         print(f"  {self.name}  薪資明細")
         print(f"{'='*50}")
         print("【收入項目】")
-        print(f"  本薪（按出勤比例）　　: {self.base_pay:>10,.0f} 元")
-        print(f"  職務津貼（按出勤比例）: {self.duty_pay:>10,.0f} 元")
+        print(f"  本薪（月曆天比例）　　: {self.base_pay:>10,.0f} 元")
+        print(f"  職務津貼（月曆天比例）: {self.duty_pay:>10,.0f} 元")
         print(f"  其他加給　　　　　　　: {self.other_pay:>10,.0f} 元")
+        print(f"  職務加給　　　　　　　: {self.position_pay:>10,.0f} 元")
         print(f"  全勤獎金　　　　　　　: {self.full_attendance_bonus:>10,.0f} 元")
-        print(f"  假日加班費　　　　　　: {self.holiday_overtime_pay:>10,.0f} 元")
+        print(f"  假日加班費（週六）　　: {self.holiday_overtime_pay:>10,.0f} 元")
         print(f"  延時加班費（1.33倍）　: {self.overtime_pay_1:>10,.0f} 元")
         print(f"  延時加班費（1.66倍）　: {self.overtime_pay_2:>10,.0f} 元")
         print(f"  節金　　　　　　　　　: {self.festival_bonus:>10,.0f} 元")
         print(f"  {'─'*38}")
         print(f"  應領合計　　　　　　　: {self.gross_income:>10,.0f} 元")
         print("【扣除項目】")
-        print(f"  勞保費（員工自付）　　: {self.labor_insurance_fee:>10,.0f} 元")
+        print(f"  勞保費（員工自付2.5%）: {self.labor_insurance_fee:>10,.0f} 元")
         print(f"  健保費（員工自付）　　: {self.health_insurance_fee:>10,.0f} 元")
         print(f"  退休金自提（6%）　　　: {self.pension_self:>10,.0f} 元")
+        print(f"  福利金（1%,最多350）　: {self.welfare_deduction:>10,.0f} 元")
         print(f"  便當費　　　　　　　　: {self.meal_deduction:>10,.0f} 元")
         print(f"  {'─'*38}")
         print(f"  扣除合計　　　　　　　: {self.total_deduction:>10,.0f} 元")
@@ -134,57 +141,52 @@ class SalaryResult:
         print(f"{'='*50}\n")
 
 
+# ──────────────────────────────────────────────
+# 核心計算函數
+# ──────────────────────────────────────────────
 def calculate_salary(
     config: SalaryConfig,
     attendance: AttendanceRecord,
     meal_record: EmployeeMealRecord | None = None,
 ) -> SalaryResult:
     """
-    計算員工當月薪資。
-
-    Args:
-        config: 薪資核定設定。
-        attendance: 出勤記錄。
-        meal_record: 便當訂購記錄（若 None 則不扣便當費）。
-
-    Returns:
-        SalaryResult 薪資計算結果。
+    計算員工當月薪資（依公司鐵律）。
     """
     result = SalaryResult(name=config.name)
-    cal_days = attendance.calendar_days
 
-    # ── 1. 本薪 & 職務津貼（按給薪日數比例）──
-    daily_base  = config.base_salary / 30
-    daily_duty  = config.duty_allowance / 30
-    pay_days    = attendance.actual_work_days + attendance.annual_leave_days
+    # ── 1. 本薪 & 職務津貼 ÷ 30 × 月曆天數 ──
+    result.base_pay = round(config.base_salary / 30 * attendance.calendar_days)
+    result.duty_pay = round(config.duty_allowance / 30 * attendance.calendar_days)
 
-    result.base_pay = round(daily_base * pay_days)
-    result.duty_pay = round(daily_duty * pay_days)
-    result.other_pay = round(config.other_allowance)
-
-    # ── 2. 全勤獎金（無事/病/無薪假才給）──
-    has_absence = (
-        attendance.unpaid_leave_days > 0
-        or attendance.sick_leave_days > 0
-        or attendance.personal_leave_days > 0
-    )
-    result.full_attendance_bonus = (
-        0.0 if has_absence else config.full_attendance_bonus
+    # ── 2. 其他加給 = 固定 + (平日出班 + 週六加班) × 260 ──
+    total_work_days = attendance.actual_work_days + attendance.holiday_overtime_days
+    result.other_pay = round(
+        config.other_allowance + total_work_days * config.daily_work_allowance
     )
 
-    # ── 3. 假日加班費（週六休息日，1 倍工資 + 1 倍加給）──
-    # 時薪基準 = (本薪 + 職務津貼 + 職務加給) ÷ 30 ÷ 8
-    hourly_base = (config.base_salary + config.duty_allowance + config.other_allowance) / 30 / 8
-    result.holiday_overtime_pay = round(
-        hourly_base * 8 * attendance.holiday_overtime_days * 2
-    )
+    # ── 3. 職務加給（固定月額，請假比例扣除由人事手動處理）──
+    result.position_pay = round(config.position_allowance)
 
-    # ── 4. 延時加班費（時薪 × 倍率）──
-    hourly_wage = hourly_base
-    result.overtime_pay_1 = round(hourly_wage * OVERTIME_RATE_1 * attendance.overtime_hours_1)
-    result.overtime_pay_2 = round(hourly_wage * OVERTIME_RATE_2 * attendance.overtime_hours_2)
+    # ── 4. 全勤獎金（每次請假扣 300，最多扣至 0）──
+    deduct = attendance.leave_instances * 300
+    result.full_attendance_bonus = max(0, config.full_attendance_bonus - deduct)
 
-    # ── 5. 節金（春節/端午/中秋，按核定節金月份計算）──
+    # ── 5. 假日加班費（週六/休息日）──
+    #   若有設定固定日費直接用，否則由時薪基準計算
+    #   標準8小時: 2hr×1.33 + 6hr×1.66 = 12.62 倍
+    if config.holiday_overtime_daily > 0:
+        holiday_daily = config.holiday_overtime_daily
+    else:
+        holiday_daily = round(config.overtime_hourly_base * 12.62 / 50) * 50  # 取整至50元
+    result.holiday_overtime_pay = round(holiday_daily * attendance.holiday_overtime_days)
+
+    # ── 6. 延時加班費（取整數時薪後計算）──
+    front_rate = round(config.overtime_hourly_base * OVERTIME_RATE_1)  # 例: 194×1.33=258
+    back_rate  = round(config.overtime_hourly_base * OVERTIME_RATE_2)  # 例: 194×1.66=322
+    result.overtime_pay_1 = round(front_rate * attendance.overtime_hours_1)
+    result.overtime_pay_2 = round(back_rate  * attendance.overtime_hours_2)
+
+    # ── 7. 節金（春節/端午/中秋，以職務津貼為標準）──
     result.festival_bonus = (
         config.duty_allowance if attendance.has_festival_bonus else 0.0
     )
@@ -194,6 +196,7 @@ def calculate_salary(
         result.base_pay
         + result.duty_pay
         + result.other_pay
+        + result.position_pay
         + result.full_attendance_bonus
         + result.holiday_overtime_pay
         + result.overtime_pay_1
@@ -201,22 +204,35 @@ def calculate_salary(
         + result.festival_bonus
     )
 
-    # ── 6. 勞保費 ──
+    # ── 8. 勞保費（員工自付 2.5%）──
     result.labor_insurance_fee = round(
-        config.labor_insurance_base * LABOR_INSURANCE_EMPLOYEE_RATE
+        config.labor_insurance_base * LABOR_INSURANCE_RATE
     )
 
-    # ── 7. 健保費 ──
+    # ── 9. 健保費（員工自付 1.551% = 5.17% × 30%）──
     result.health_insurance_fee = round(
-        config.health_insurance_base * HEALTH_INSURANCE_EMPLOYEE_RATE
+        config.health_insurance_base * HEALTH_INSURANCE_RATE
     )
 
-    # ── 8. 退休金自提 ──
+    # ── 10. 退休金自提 6%（公式：IF(出勤天 = 應出勤天, 1, 出勤天/30) × 投保薪 × 6%）──
+    #   actual_work_days = 平日出勤天（Mon-Fri），work_days = 當月法定工作日
+    #   全勤 → 比例 = 1；有缺勤 → 比例 = actual_work_days / 30
+    pension_ratio = (
+        1.0 if attendance.actual_work_days >= attendance.work_days
+        else attendance.actual_work_days / 30
+    )
     result.pension_self = (
-        round(config.pension_base * 0.06) if config.pension_self_contribute else 0.0
+        round(config.pension_base * PENSION_EMPLOYEE_RATE * pension_ratio)
+        if config.pension_self_contribute else 0.0
     )
 
-    # ── 9. 便當費 ──
+    # ── 11. 福利金（應領合計 × 1%，最多 350 元）──
+    result.welfare_deduction = min(
+        WELFARE_FUND_MAX,
+        round(result.gross_income * WELFARE_FUND_RATE)
+    )
+
+    # ── 12. 便當費 ──
     if meal_record:
         result.meal_deduction = meal_record.total_cost
 
@@ -225,6 +241,7 @@ def calculate_salary(
         result.labor_insurance_fee
         + result.health_insurance_fee
         + result.pension_self
+        + result.welfare_deduction
         + result.meal_deduction
     )
 
@@ -239,17 +256,7 @@ def batch_calculate(
     attendances: dict[str, AttendanceRecord],
     meal_summary: dict | None = None,
 ) -> list[SalaryResult]:
-    """
-    批次計算所有員工薪資。
-
-    Args:
-        configs: 員工薪資設定清單。
-        attendances: 以員工姓名為 key 的出勤記錄 dict。
-        meal_summary: meal_tracker.summarize() 回傳的摘要（可選）。
-
-    Returns:
-        list[SalaryResult]
-    """
+    """批次計算所有員工薪資。"""
     results = []
     meal_records = {}
     if meal_summary:
@@ -269,10 +276,17 @@ def batch_calculate(
 
 
 # ──────────────────────────────────────────────
-# 單機示範（不需要 Google Sheets）
+# 示範：鄧志展 2026年3月
 # ──────────────────────────────────────────────
 def demo():
-    """示範計算一位員工的薪資（2026年2月）。"""
+    """
+    鄧志展 2026年3月薪資（對照手寫計算表）
+    本薪16350/30×31=16895  職務津貼7950/30×31=8215
+    其他加給2850+26×260=9610  職務加給17850
+    前段50hr×258=12900  後段60hr×322=19320
+    假日4天×2450=9800  全勤1600
+    合計應達 96,190
+    """
     from meal_tracker import EmployeeMealRecord
 
     config = SalaryConfig(
@@ -280,7 +294,10 @@ def demo():
         name="鄧志展",
         base_salary=16_350,
         duty_allowance=7_950,
-        other_allowance=2_850,
+        other_allowance=2_850,          # 其他加給固定部分
+        position_allowance=17_850,      # 職務加給（月額）
+        overtime_hourly_base=194,       # 時薪基準（194×1.33=258, 194×1.66=322）
+        holiday_overtime_daily=2_450,   # 週六加班日費（鐵律）
         full_attendance_bonus=1_600,
         labor_insurance_base=45_800,
         health_insurance_base=60_800,
@@ -292,19 +309,29 @@ def demo():
         year=2026,
         month=3,
         calendar_days=31,
-        work_days=21,
-        actual_work_days=21.0,
-        holiday_overtime_days=4.0,   # 4個週六
-        overtime_hours_1=50.0,       # 前段 1.33倍
-        overtime_hours_2=60.0,       # 後段 1.66倍
-        has_festival_bonus=False,
+        work_days=22,                   # 3月 Mon-Fri 法定22天
+        actual_work_days=22.0,          # 平日實際出班22天（全勤 → 退休金比例=1）
+        holiday_overtime_days=4.0,      # 週六加班4天（其他加給 = 22+4=26天 × 260）
+        overtime_hours_1=50.0,          # 前段 1.33倍（早班+晚班合計）
+        overtime_hours_2=60.0,          # 後段 1.66倍
+        leave_instances=0,              # 無請假
     )
 
-    # 2026年3月便當：訂了 20 份普通便當
+    # 3月便當 20 份
     meal = EmployeeMealRecord(name="鄧志展", normal_count=20)
 
     result = calculate_salary(config, attendance, meal)
     result.print_detail()
+
+    # 驗證對照手寫
+    expected_gross = 96_190
+    print(f"  對照手寫合計: {expected_gross:,} 元")
+    diff = result.gross_income - expected_gross
+    if diff == 0:
+        print("  ✓ 應領合計完全吻合！")
+    else:
+        print(f"  差異: {diff:+,.0f} 元")
+
     return result
 
 
