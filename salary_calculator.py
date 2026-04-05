@@ -57,6 +57,7 @@ class SalaryConfig:
     health_insurance_base: float    # 健保投保薪資
     pension_base: float             # 退休金投保薪資
     pension_self_contribute: bool = False   # 是否自提 6%
+    meal_exempt: bool = False               # 不訂便當（不扣便當費）
     holiday_overtime_daily: float = 0.0    # 假日加班固定日費（0 = 由時薪基準自動計算）
     daily_work_allowance: float = DAILY_WORK_ALLOWANCE  # 出勤加給/天（預設 260）
 
@@ -232,8 +233,8 @@ def calculate_salary(
         round(result.gross_income * WELFARE_FUND_RATE)
     )
 
-    # ── 12. 便當費 ──
-    if meal_record:
+    # ── 12. 便當費（meal_exempt=True 者永遠不扣）──
+    if meal_record and not config.meal_exempt:
         result.meal_deduction = meal_record.total_cost
 
     # ── 扣除合計 ──
@@ -298,6 +299,7 @@ def demo():
         position_allowance=17_850,      # 職務加給（月額）
         overtime_hourly_base=194,       # 時薪基準（194×1.33=258, 194×1.66=322）
         holiday_overtime_daily=2_450,   # 週六加班日費（鐵律）
+        meal_exempt=True,               # 鄧志展不訂便當，永遠不扣便當費
         full_attendance_bonus=1_600,
         labor_insurance_base=45_800,
         health_insurance_base=60_800,
@@ -317,10 +319,7 @@ def demo():
         leave_instances=0,              # 無請假
     )
 
-    # 3月便當 20 份
-    meal = EmployeeMealRecord(name="鄧志展", normal_count=20)
-
-    result = calculate_salary(config, attendance, meal)
+    result = calculate_salary(config, attendance)  # 不傳 meal_record，鄧志展不訂便當
     result.print_detail()
 
     # 驗證對照手寫
