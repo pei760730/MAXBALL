@@ -218,9 +218,9 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         full_attendance_bonus=1_600,
         labor_insurance_base=30_300,
         health_insurance_base=30_300,
-        health_dependents=1,
+        health_dependents=0,
         pension_base=30_300,
-        pension_self_contribute=False,
+        pension_self_contribute=True,
         daily_work_allowance=50,        # 50 (2026)
     ),
 
@@ -257,7 +257,7 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         health_insurance_base=38_200,
         health_dependents=0,
         pension_base=38_200,
-        pension_self_contribute=False,  # TODO: 核定表標記 ?，待確認
+        pension_self_contribute=True,   # 核定表確認：有自提6%
         daily_work_allowance=175,       # 45+50+50+30
     ),
 
@@ -320,7 +320,7 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         employee_id="37",
         name="吳慧娟",
         base_salary=14_100,
-        duty_allowance=2_000,
+        duty_allowance=2_700,
         other_allowance=3_580,
         position_allowance=8_770,
         holiday_overtime_daily=1_617,
