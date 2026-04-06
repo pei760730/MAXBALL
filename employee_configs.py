@@ -2,7 +2,22 @@
 台籍員工薪資核定基準
 （依公司核定表，不含外籍員工）
 
-daily_work_allowance: 已知 鄧志展=260, 許柏凱=175；其餘待人事確認後補入。
+daily_work_allowance 年份累加邏輯（台灣基本工資調漲補差額，依表現）：
+  #9  李世彬=40 (2026)
+  #10 許清輝=160 (40+40+40+40)
+  #11 鄧志展=260 (110+50+50+50)
+  #13 許柏凱=175 (60+30+40+45)
+  #18 林義明=280 (150+40+40+50)
+  #19 莊明燦=50 (2026)
+  #22 許連灯=175 (45+50+50+30)
+  #26 王淑如=135 (45+30+30+30)
+  #29 許天賜=245 (85+50+50+60)
+  #8,#14,#16,#17,#20 = 0（薪資已達標）
+  #31 陳佩欣=0（薪資已達標）
+  #37 吳慧娟=155 (45+30+40+40)
+  #39 劉英美=95 (45+30+20)
+  #45 莊志成=95 (55+40)
+  #5 王靖銘 待確認
 """
 
 from salary_calculator import SalaryConfig
@@ -24,10 +39,10 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         health_dependents=0,
         pension_base=45_800,
         pension_self_contribute=False,
-        daily_work_allowance=0,         # TODO: 待確認
+        daily_work_allowance=235,        # 反推確認：50,375 exact match
     ),
 
-    # ── #8 陳麥斯 ──
+    # ── #8 陳麥斯 ── 薪資已達標，無需加給
     SalaryConfig(
         employee_id="8",
         name="陳麥斯",
@@ -42,7 +57,7 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         health_dependents=1,
         pension_base=34_800,
         pension_self_contribute=False,
-        daily_work_allowance=0,         # TODO: 待確認
+        daily_work_allowance=0,
     ),
 
     # ── #9 李世彬 ──
@@ -60,7 +75,7 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         health_dependents=0,
         pension_base=55_400,
         pension_self_contribute=False,
-        daily_work_allowance=0,         # TODO: 待確認
+        daily_work_allowance=40,
     ),
 
     # ── #10 許清輝 ──
@@ -78,7 +93,7 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         health_dependents=0,
         pension_base=31_800,
         pension_self_contribute=True,
-        daily_work_allowance=0,         # TODO: 待確認
+        daily_work_allowance=160,
     ),
 
     # ── #11 鄧志展 ──
@@ -133,10 +148,11 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         health_dependents=0,
         pension_base=34_800,
         pension_self_contribute=False,
-        daily_work_allowance=0,         # TODO: 待確認
+        meal_exempt=True,               # 陳姿惠不訂便當
+        daily_work_allowance=0,
     ),
 
-    # ── #16 陳沛思 ──
+    # ── #16 陳沛思 ── 薪資已達標，無需加給
     SalaryConfig(
         employee_id="16",
         name="陳沛思",
@@ -151,10 +167,10 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         health_dependents=0,
         pension_base=34_800,
         pension_self_contribute=False,
-        daily_work_allowance=0,         # TODO: 待確認
+        daily_work_allowance=0,
     ),
 
-    # ── #17 簡宜君 ──
+    # ── #17 簡宜君 ── 薪資已達標，無需加給
     SalaryConfig(
         employee_id="17",
         name="簡宜君",
@@ -169,7 +185,7 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         health_dependents=0,
         pension_base=29_500,
         pension_self_contribute=False,
-        daily_work_allowance=0,         # TODO: 待確認
+        daily_work_allowance=0,
     ),
 
     # ── #18 林義明 ──
@@ -187,7 +203,7 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         health_dependents=0,
         pension_base=31_800,
         pension_self_contribute=False,
-        daily_work_allowance=0,         # TODO: 待確認
+        daily_work_allowance=280,
     ),
 
     # ── #19 莊明燦 ──
@@ -202,13 +218,13 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         full_attendance_bonus=1_600,
         labor_insurance_base=30_300,
         health_insurance_base=30_300,
-        health_dependents=1,
+        health_dependents=0,
         pension_base=30_300,
-        pension_self_contribute=False,
-        daily_work_allowance=0,         # TODO: 待確認
+        pension_self_contribute=True,
+        daily_work_allowance=50,        # 50 (2026)
     ),
 
-    # ── #20 黃郁愛 ──
+    # ── #20 黃郁愛 ── 薪資已達標，無需加給
     SalaryConfig(
         employee_id="20",
         name="黃郁愛",
@@ -223,7 +239,7 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         health_dependents=0,
         pension_base=34_800,
         pension_self_contribute=False,
-        daily_work_allowance=0,         # TODO: 待確認
+        daily_work_allowance=0,
     ),
 
     # ── #22 許連灯 ──
@@ -241,8 +257,8 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         health_insurance_base=38_200,
         health_dependents=0,
         pension_base=38_200,
-        pension_self_contribute=False,  # TODO: 核定表標記 ?，待確認
-        daily_work_allowance=0,         # TODO: 待確認
+        pension_self_contribute=True,   # 核定表確認：有自提6%
+        daily_work_allowance=175,       # 45+50+50+30
     ),
 
     # ── #26 王淑如 ──
@@ -260,7 +276,7 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         health_dependents=0,
         pension_base=31_800,
         pension_self_contribute=False,
-        daily_work_allowance=0,         # TODO: 待確認
+        daily_work_allowance=135,       # 45+30+30+30
     ),
 
     # ── #29 許天賜 ──
@@ -278,14 +294,14 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         health_dependents=1,
         pension_base=42_000,
         pension_self_contribute=True,
-        daily_work_allowance=0,         # TODO: 待確認
+        daily_work_allowance=245,       # 85+50+50+60
     ),
 
     # ── #31 陳佩欣 ──
     SalaryConfig(
         employee_id="31",
         name="陳佩欣",
-        base_salary=16_350,
+        base_salary=14_100,
         duty_allowance=2_700,
         other_allowance=1_120,
         position_allowance=10_680,
@@ -296,7 +312,7 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         health_dependents=0,
         pension_base=29_500,
         pension_self_contribute=True,
-        daily_work_allowance=0,         # TODO: 待確認
+        daily_work_allowance=0,
     ),
 
     # ── #37 吳慧娟 ──
@@ -304,7 +320,7 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         employee_id="37",
         name="吳慧娟",
         base_salary=14_100,
-        duty_allowance=2_000,
+        duty_allowance=2_700,
         other_allowance=3_580,
         position_allowance=8_770,
         holiday_overtime_daily=1_617,
@@ -314,7 +330,7 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         health_dependents=0,
         pension_base=33_300,
         pension_self_contribute=False,
-        daily_work_allowance=0,         # TODO: 待確認
+        daily_work_allowance=155,       # 45+30+40+40
     ),
 
     # ── #39 劉英美 ──
@@ -332,7 +348,7 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         health_dependents=0,
         pension_base=29_500,
         pension_self_contribute=False,
-        daily_work_allowance=0,         # TODO: 待確認
+        daily_work_allowance=95,        # 45+30+20
     ),
 
     # ── #45 莊志成 ──
@@ -350,7 +366,9 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         health_dependents=0,
         pension_base=29_500,
         pension_self_contribute=False,
-        daily_work_allowance=0,         # TODO: 待確認
+        daily_work_allowance=45,        # 45 (反推確認)
+        night_shift_daily=250,          # 夜班津貼/天
+        meal_allowance_daily=150,       # 伙食津貼/天
     ),
 ]
 
