@@ -51,7 +51,8 @@ class SalaryConfig:
     duty_allowance: float           # 職務津貼月額
     other_allowance: float          # 其他加給（固定部分）
     position_allowance: float       # 職務加給（固定月額，請假比例扣除）
-    overtime_hourly_base: float     # 時薪基準（= 前段率/1.33 = 後段率/1.66）
+    front_overtime_rate: float       # 延時加班費 1.33倍 時薪（直接取自核定表）
+    back_overtime_rate: float        # 延時加班費 1.66倍 時薪（直接取自核定表）
     full_attendance_bonus: float    # 全勤獎金月額（通常 1,600）
     labor_insurance_base: float     # 勞保投保薪資
     health_insurance_base: float    # 健保投保薪資
@@ -174,19 +175,13 @@ def calculate_salary(
     result.full_attendance_bonus = max(0, config.full_attendance_bonus - deduct)
 
     # ── 5. 假日加班費（週六/休息日）──
-    #   若有設定固定日費直接用，否則由時薪基準計算
-    #   標準8小時: 2hr×1.33 + 6hr×1.66 = 12.62 倍
-    if config.holiday_overtime_daily > 0:
-        holiday_daily = config.holiday_overtime_daily
-    else:
-        holiday_daily = round(config.overtime_hourly_base * 12.62 / 50) * 50  # 取整至50元
-    result.holiday_overtime_pay = round(holiday_daily * attendance.holiday_overtime_days)
+    result.holiday_overtime_pay = round(
+        config.holiday_overtime_daily * attendance.holiday_overtime_days
+    )
 
-    # ── 6. 延時加班費（取整數時薪後計算）──
-    front_rate = round(config.overtime_hourly_base * OVERTIME_RATE_1)  # 例: 194×1.33=258
-    back_rate  = round(config.overtime_hourly_base * OVERTIME_RATE_2)  # 例: 194×1.66=322
-    result.overtime_pay_1 = round(front_rate * attendance.overtime_hours_1)
-    result.overtime_pay_2 = round(back_rate  * attendance.overtime_hours_2)
+    # ── 6. 延時加班費（直接使用核定表費率）──
+    result.overtime_pay_1 = round(config.front_overtime_rate * attendance.overtime_hours_1)
+    result.overtime_pay_2 = round(config.back_overtime_rate  * attendance.overtime_hours_2)
 
     # ── 7. 節金（春節/端午/中秋，以職務津貼為標準）──
     result.festival_bonus = (
@@ -298,7 +293,8 @@ def demo():
         duty_allowance=7_950,
         other_allowance=2_850,          # 其他加給固定部分
         position_allowance=17_850,      # 職務加給（月額）
-        overtime_hourly_base=194,       # 時薪基準（194×1.33=258, 194×1.66=322）
+        front_overtime_rate=258,        # 1.33倍延時時薪
+        back_overtime_rate=322,         # 1.66倍延時時薪
         holiday_overtime_daily=2_450,   # 週六加班日費（鐵律）
         daily_work_allowance=260,       # 出勤加給260元/天
         meal_exempt=True,               # 鄧志展不訂便當，永遠不扣便當費
@@ -347,8 +343,9 @@ def demo_xu_bo_kai():
         duty_allowance=2_700,
         other_allowance=4_800,          # 其他加給固定部分
         position_allowance=9_500,       # 職務加給
-        overtime_hourly_base=136,       # 136×1.33=181, 136×1.66=226
-        holiday_overtime_daily=1_719,   # 假日加班日費（2hr×181+6hr×226=1,718≈1,719）
+        front_overtime_rate=181,        # 1.33倍延時時薪
+        back_overtime_rate=226,         # 1.66倍延時時薪
+        holiday_overtime_daily=1_719,   # 假日加班日費
         daily_work_allowance=175,       # 出勤加給175元/天（60+30+40+45）
         full_attendance_bonus=1_600,
         labor_insurance_base=30_300,
