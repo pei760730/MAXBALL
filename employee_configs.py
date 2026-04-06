@@ -148,6 +148,7 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         health_dependents=0,
         pension_base=34_800,
         pension_self_contribute=False,
+        meal_exempt=True,               # 陳姿惠不訂便當
         daily_work_allowance=0,
     ),
 
