@@ -37,6 +37,8 @@ class SalaryConfig:
     health_dependents: int = 0             # 健保眷屬人數
     holiday_overtime_daily: float = 0.0    # 假日加班固定日費
     daily_work_allowance: float = 0.0      # 出勤加給/天（基本工資差額補貼）
+    night_shift_daily: float = 0.0         # 夜班津貼/天（依實際上班天含六日）
+    meal_allowance_daily: float = 0.0      # 伙食津貼/天（依實際上班天含六日）
 
 
 @dataclass
@@ -73,6 +75,8 @@ class SalaryResult:
     holiday_overtime_pay: float = 0.0
     overtime_pay_1: float = 0.0
     overtime_pay_2: float = 0.0
+    night_shift_pay: float = 0.0
+    meal_allowance_pay: float = 0.0
     festival_bonus: float = 0.0
     gross_income: float = 0.0
     # 扣除
@@ -98,6 +102,10 @@ class SalaryResult:
         print(f"  假日加班費（週六）　　: {self.holiday_overtime_pay:>10,.0f} 元")
         print(f"  延時加班費（1.33倍）　: {self.overtime_pay_1:>10,.0f} 元")
         print(f"  延時加班費（1.66倍）　: {self.overtime_pay_2:>10,.0f} 元")
+        if self.night_shift_pay:
+            print(f"  夜班津貼　　　　　　　: {self.night_shift_pay:>10,.0f} 元")
+        if self.meal_allowance_pay:
+            print(f"  伙食津貼　　　　　　　: {self.meal_allowance_pay:>10,.0f} 元")
         print(f"  節金　　　　　　　　　: {self.festival_bonus:>10,.0f} 元")
         print(f"  {'─'*38}")
         print(f"  應領合計　　　　　　　: {self.gross_income:>10,.0f} 元")
@@ -166,14 +174,20 @@ def calculate_salary(config: SalaryConfig, attendance: AttendanceRecord) -> Sala
     r.overtime_pay_1 = round(front_rate * attendance.overtime_hours_1)
     r.overtime_pay_2 = round(back_rate  * attendance.overtime_hours_2)
 
-    # ── 7. 節金 ──
+    # ── 7. 夜班津貼 & 伙食津貼（依實際上班天含六日）──
+    total_work_days_all = attendance.actual_work_days + attendance.holiday_overtime_days + attendance.sunday_overtime_days
+    r.night_shift_pay = round(config.night_shift_daily * total_work_days_all)
+    r.meal_allowance_pay = round(config.meal_allowance_daily * total_work_days_all)
+
+    # ── 8. 節金 ──
     r.festival_bonus = config.duty_allowance if attendance.has_festival_bonus else 0.0
 
     # ── 應領合計 ──
     r.gross_income = (
         r.base_pay + r.duty_pay + r.other_pay + r.position_pay
         + r.full_attendance_bonus + r.holiday_overtime_pay
-        + r.overtime_pay_1 + r.overtime_pay_2 + r.festival_bonus
+        + r.overtime_pay_1 + r.overtime_pay_2
+        + r.night_shift_pay + r.meal_allowance_pay + r.festival_bonus
     )
 
     # ── 8. 勞保費 ──

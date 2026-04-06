@@ -367,7 +367,8 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         pension_base=29_500,
         pension_self_contribute=False,
         daily_work_allowance=45,        # 45 (反推確認)
-        # 莊志成特殊項目：夜班津貼 250/天 + 伙食津貼 150/天（依實際上班天數含六日）
+        night_shift_daily=250,          # 夜班津貼/天
+        meal_allowance_daily=150,       # 伙食津貼/天
     ),
 ]
 
