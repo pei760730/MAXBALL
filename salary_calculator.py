@@ -165,30 +165,22 @@ def calculate_salary(
         config.other_allowance + total_work_days * config.daily_work_allowance
     )
 
-    # ── 3. 職務加給（按請假天數比例扣除，含特休）──
-    total_leave_days = (
-        attendance.annual_leave_days
-        + attendance.personal_leave_days
+    # ── 3. 職務加給（按事假/病假天數比例扣除，特休不扣）──
+    non_annual_leave_days = (
+        attendance.personal_leave_days
         + attendance.sick_leave_days
         + attendance.unpaid_leave_days
     )
-    if total_leave_days > 0 and attendance.work_days > 0:
+    if non_annual_leave_days > 0 and attendance.work_days > 0:
         position_deduct = round(
-            config.position_allowance / attendance.work_days * total_leave_days
+            config.position_allowance / attendance.work_days * non_annual_leave_days
         )
         result.position_pay = round(config.position_allowance - position_deduct)
     else:
         result.position_pay = round(config.position_allowance)
 
-    # ── 4. 全勤獎金（每次請假扣 300，特休也算，最多扣至 0）──
-    # leave_instances 包含所有請假次數（含特休）
-    # 若 leave_instances 未手動設定，由特休天數自動推算（每 0.5 天 = 1 次）
-    leave_count = attendance.leave_instances
-    if leave_count == 0 and attendance.annual_leave_days > 0:
-        # 特休自動計為 leave_instance（每次請假扣 300）
-        import math
-        leave_count = math.ceil(attendance.annual_leave_days / 0.5)
-    deduct = leave_count * 300
+    # ── 4. 全勤獎金（每次請假扣 300，特休不扣，最多扣至 0）──
+    deduct = attendance.leave_instances * 300
     result.full_attendance_bonus = max(0, config.full_attendance_bonus - deduct)
 
     # ── 5. 假日加班費（週六/休息日）──
