@@ -301,7 +301,7 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
     SalaryConfig(
         employee_id="31",
         name="陳佩欣",
-        base_salary=16_350,
+        base_salary=14_100,
         duty_allowance=2_700,
         other_allowance=1_120,
         position_allowance=10_680,
