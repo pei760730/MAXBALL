@@ -2,7 +2,7 @@
 台籍員工薪資核定基準
 （依公司核定表，不含外籍員工）
 
-daily_work_allowance: 已知 鄧志展=260, 許柏凱=175；其餘待人事確認後補入。
+daily_work_allowance: 已知 鄧志展=260, 許柏凱=175, 李世彬=40, 許清輝=160, 林義明=280；其餘待人事確認後補入。
 """
 
 from salary_calculator import SalaryConfig
@@ -60,7 +60,7 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         health_dependents=0,
         pension_base=55_400,
         pension_self_contribute=False,
-        daily_work_allowance=0,         # TODO: 待確認
+        daily_work_allowance=40,
     ),
 
     # ── #10 許清輝 ──
@@ -78,7 +78,7 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         health_dependents=0,
         pension_base=31_800,
         pension_self_contribute=True,
-        daily_work_allowance=0,         # TODO: 待確認
+        daily_work_allowance=160,
     ),
 
     # ── #11 鄧志展 ──
@@ -187,7 +187,7 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         health_dependents=0,
         pension_base=31_800,
         pension_self_contribute=False,
-        daily_work_allowance=0,         # TODO: 待確認
+        daily_work_allowance=280,
     ),
 
     # ── #19 莊明燦 ──
