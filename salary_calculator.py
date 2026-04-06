@@ -232,11 +232,13 @@ def calculate_salary(
     )
 
     # ── 10. 退休金自提 6%（公式：IF(出勤天 = 應出勤天, 1, 出勤天/30) × 投保薪 × 6%）──
-    #   actual_work_days = 平日出勤天（Mon-Fri），work_days = 當月法定工作日
-    #   全勤 → 比例 = 1；有缺勤 → 比例 = actual_work_days / 30
+    #   特休視為出勤（有薪假），不影響退休金比例
+    #   actual_work_days + annual_leave_days >= work_days → 比例 = 1
+    #   有事假/病假/無薪假缺勤 → 比例 = (actual_work_days + annual_leave_days) / 30
+    effective_work_days = attendance.actual_work_days + attendance.annual_leave_days
     pension_ratio = (
-        1.0 if attendance.actual_work_days >= attendance.work_days
-        else attendance.actual_work_days / 30
+        1.0 if effective_work_days >= attendance.work_days
+        else effective_work_days / 30
     )
     result.pension_self = (
         round(config.pension_base * PENSION_EMPLOYEE_RATE * pension_ratio)

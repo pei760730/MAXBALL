@@ -39,7 +39,7 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         health_dependents=0,
         pension_base=45_800,
         pension_self_contribute=False,
-        daily_work_allowance=0,         # TODO: 待確認(#5)
+        daily_work_allowance=235,        # 反推確認：50,375 exact match
     ),
 
     # ── #8 陳麥斯 ── 薪資已達標，無需加給
