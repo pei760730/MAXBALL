@@ -39,15 +39,13 @@
 
 import math
 
-
-# ── 時間常數（分鐘）──────────────────────────────
-WORK_START     = 8 * 60        # 08:00 正常上班
-EVENING_START  = 17 * 60 + 30  # 17:30 晚班加班開始
-MEAL_BREAK_END = 17 * 60 + 30  # 17:00-17:30 吃飯休息
-
-# 倍率
-RATE_1 = 1.33
-RATE_2 = 1.66
+from constants import (
+    OVERTIME_RATE_FRONT as RATE_1,
+    OVERTIME_RATE_BACK as RATE_2,
+    WORK_START_MINUTES as WORK_START,
+    EVENING_OT_START_MIN as EVENING_START,
+    HOLIDAY_OT_SEGMENTS,
+)
 
 
 def _to_minutes(time_str: str) -> int:
@@ -174,18 +172,11 @@ def calc_holiday_overtime_pay(checkin_str: str, checkout_str: str,
     co = _to_minutes(checkout_str)
     total_hrs = (co - ci) / 60
 
-    # 套用假日分段倍率
-    segments = [
-        (2.0,  RATE_1),   # hr 1-2
-        (6.0,  RATE_2),   # hr 3-8
-        (2.0,  RATE_1),   # hr 9-10
-        (9999, RATE_2),   # hr 11+
-    ]
-
+    # 套用假日分段倍率（從 constants.py）
     remaining = total_hrs
     pay = 0.0
     breakdown_parts = []
-    for limit, rate in segments:
+    for limit, rate in HOLIDAY_OT_SEGMENTS:
         hrs = min(remaining, limit)
         if hrs <= 0:
             break
