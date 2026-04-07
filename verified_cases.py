@@ -43,9 +43,13 @@ CONFIRMED_RULES = {
         "rule": "其他加給 = 固定加給 + (actual_work_days + holiday_ot_days) × dwa",
         "verified_by": ["王靖銘#5（dwa=235, exact 50375）", "許柏凱#13（dwa=175, exact 34262）"],
     },
+    "holiday_ot_rounding": {
+        "rule": "假日加班費 = round(hourly × (1.33×2+1.66×6) × 天數)，不先round每天",
+        "verified_by": ["鄧志展#11（4天=9802, 先round會少2元）"],
+    },
     "health_insurance_formula": {
         "rule": "健保費 = 投保薪資 × 5.17% × (1+眷屬) × 30%，可能與查表有1-2元差",
-        "verified_by": ["鄧志展#11（diff=-2）", "許清輝#10（diff=-1）"],
+        "verified_by": ["鄧志展#11（exact 943）", "許清輝#10（diff=-1）"],
     },
 }
 
@@ -140,6 +144,21 @@ CASES = [
             "meal_count": 21,
         },
         "notes": "特休1天, pension=False",
+    },
+    {
+        "name": "鄧志展",
+        "month": "2026-03",
+        "target": 90106,
+        "tolerance": 0,
+        "attendance": {
+            "calendar_days": 31, "work_days": 22,
+            "actual_work_days": 22.0,
+            "holiday_overtime_days": 4.0,
+            "overtime_hours_1": 50.0,
+            "overtime_hours_2": 60.0,
+            "meal_count": 0,
+        },
+        "notes": "前段50hr+後段60hr, 假日加班4天=9802, meal_exempt, pension自提6%",
     },
 ]
 
