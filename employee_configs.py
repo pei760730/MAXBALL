@@ -258,7 +258,7 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         health_insurance_base=38_200,
         health_dependents=0,
         pension_base=38_200,
-        pension_self_contribute=True,   # 核定表確認：有自提6%
+        pension_self_contribute=False,  # 截圖確認：退休金自提=0
         daily_work_allowance=175,       # 45+50+50+30
     ),
 
@@ -276,7 +276,7 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         health_insurance_base=31_800,
         health_dependents=0,
         pension_base=31_800,
-        pension_self_contribute=False,
+        pension_self_contribute=True,   # 截圖確認：退休金自提6%=1908
         daily_work_allowance=135,       # 45+30+30+30
     ),
 
@@ -284,7 +284,7 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
     SalaryConfig(
         employee_id="29",
         name="許天賜",
-        base_salary=14_100,
+        base_salary=16_350,             # 截圖確認（非14100）
         duty_allowance=7_000,
         other_allowance=0,
         position_allowance=16_560,
@@ -292,7 +292,7 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         full_attendance_bonus=1_600,
         labor_insurance_base=42_000,
         health_insurance_base=42_000,
-        health_dependents=1,
+        health_dependents=0,            # 截圖確認：健保651=42000×5.17%×1×30%
         pension_base=42_000,
         pension_self_contribute=True,
         daily_work_allowance=245,       # 85+50+50+60

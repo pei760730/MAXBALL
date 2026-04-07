@@ -185,6 +185,56 @@ CASES = [
         },
         "notes": "特休0.5天, 勞保=0(免繳), pension自提6% base=30300",
     },
+    {
+        "name": "黃郁愛",
+        "month": "2026-03",
+        "target": 33800,
+        "tolerance": 0,
+        "attendance": {
+            "calendar_days": 31, "work_days": 22,
+            "actual_work_days": 22.0,
+            "meal_count": 0,
+        },
+        "notes": "22天全勤, 無加班, 無便當",
+    },
+    {
+        "name": "許連灯",
+        "month": "2026-03",
+        "target": 32046,
+        "tolerance": 0,
+        "attendance": {
+            "calendar_days": 31, "work_days": 22,
+            "actual_work_days": 21.0,
+            "annual_leave_days": 1.0,
+            "meal_count": 20,
+        },
+        "notes": "特休1天, pension=False. 截圖實領30205含特殊扣除1841(勞退健保自付)",
+    },
+    {
+        "name": "王淑如",
+        "month": "2026-03",
+        "target": 31324,
+        "tolerance": 0,
+        "attendance": {
+            "calendar_days": 31, "work_days": 22,
+            "actual_work_days": 22.0,
+            "meal_count": 22,
+        },
+        "notes": "22天全勤, pension自提6%=1908",
+    },
+    {
+        "name": "許天賜",
+        "month": "2026-03",
+        "target": 41980,
+        "tolerance": 1,
+        "attendance": {
+            "calendar_days": 31, "work_days": 22,
+            "actual_work_days": 18.5,
+            "annual_leave_days": 3.5,
+            "meal_count": 18,
+        },
+        "notes": "特休3.5天, base=16350, dep=0, 其他加給取整差1(Python銀行家vs傳統四捨五入)",
+    },
 ]
 
 
