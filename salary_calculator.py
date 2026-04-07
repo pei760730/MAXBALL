@@ -36,7 +36,6 @@ class SalaryConfig:
     meal_exempt: bool = False               # 不訂便當（不扣便當費）
     welfare_exempt: bool = False            # 不扣福利金
     health_dependents: int = 0             # 健保眷屬人數
-    holiday_overtime_daily: float = 0.0    # 假日加班固定日費
     daily_work_allowance: float = 0.0      # 出勤加給/天（基本工資差額補貼）
     night_shift_daily: float = 0.0         # 夜班津貼/天（依實際上班天含六日）
     meal_allowance_daily: float = 0.0      # 伙食津貼/天（依實際上班天含六日）
