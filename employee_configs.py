@@ -32,7 +32,6 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         duty_allowance=7_950,
         other_allowance=2_850,
         position_allowance=17_850,
-        holiday_overtime_daily=2_450,
         full_attendance_bonus=1_600,
         labor_insurance_base=45_800,
         health_insurance_base=45_800,
@@ -50,7 +49,6 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         duty_allowance=2_700,
         other_allowance=0,
         position_allowance=16_600,
-        holiday_overtime_daily=1_840,
         full_attendance_bonus=1_600,
         labor_insurance_base=34_800,
         health_insurance_base=34_800,
@@ -68,7 +66,6 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         duty_allowance=8_550,
         other_allowance=9_860,
         position_allowance=16_800,
-        holiday_overtime_daily=2_795,
         full_attendance_bonus=1_600,
         labor_insurance_base=45_800,
         health_insurance_base=55_400,
@@ -86,7 +83,6 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         duty_allowance=7_200,
         other_allowance=0,
         position_allowance=7_450,
-        holiday_overtime_daily=1_714,
         full_attendance_bonus=1_600,
         labor_insurance_base=31_800,
         health_insurance_base=31_800,
@@ -104,7 +100,6 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         duty_allowance=7_950,
         other_allowance=2_850,
         position_allowance=17_850,
-        holiday_overtime_daily=2_450,
         full_attendance_bonus=1_600,
         labor_insurance_base=45_800,
         health_insurance_base=60_800,
@@ -123,7 +118,6 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         duty_allowance=2_700,
         other_allowance=4_800,
         position_allowance=9_500,
-        holiday_overtime_daily=1_719,
         full_attendance_bonus=1_600,
         labor_insurance_base=30_300,
         health_insurance_base=30_300,
@@ -141,7 +135,6 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         duty_allowance=2_700,
         other_allowance=0,
         position_allowance=16_600,
-        holiday_overtime_daily=1_840,
         full_attendance_bonus=1_600,
         labor_insurance_base=34_800,
         health_insurance_base=34_800,
@@ -160,7 +153,6 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         duty_allowance=2_700,
         other_allowance=0,
         position_allowance=16_600,
-        holiday_overtime_daily=1_840,
         full_attendance_bonus=1_600,
         labor_insurance_base=34_800,
         health_insurance_base=34_800,
@@ -168,6 +160,7 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         pension_base=34_800,
         pension_self_contribute=False,
         daily_work_allowance=0,
+        welfare_exempt=True,            # 家族成員，不扣福利金
     ),
 
     # ── #17 簡宜君 ── 薪資已達標，無需加給
@@ -178,7 +171,6 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         duty_allowance=2_000,
         other_allowance=1_120,
         position_allowance=10_680,
-        holiday_overtime_daily=1_551,
         full_attendance_bonus=1_600,
         labor_insurance_base=29_500,
         health_insurance_base=29_500,
@@ -196,7 +188,6 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         duty_allowance=2_700,
         other_allowance=3_650,
         position_allowance=10_150,
-        holiday_overtime_daily=1_693,
         full_attendance_bonus=1_600,
         labor_insurance_base=31_800,
         health_insurance_base=31_800,
@@ -214,9 +205,8 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         duty_allowance=2_850,
         other_allowance=0,
         position_allowance=13_120,
-        holiday_overtime_daily=1_665,
         full_attendance_bonus=1_600,
-        labor_insurance_base=30_300,
+        labor_insurance_base=0,             # 免繳勞保（截圖勞保=0）
         health_insurance_base=30_300,
         health_dependents=0,
         pension_base=30_300,
@@ -232,7 +222,6 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         duty_allowance=2_700,
         other_allowance=0,
         position_allowance=16_600,
-        holiday_overtime_daily=1_840,
         full_attendance_bonus=1_600,
         labor_insurance_base=34_800,
         health_insurance_base=34_800,
@@ -251,13 +240,12 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         duty_allowance=2_700,
         other_allowance=3_120,
         position_allowance=8_480,
-        holiday_overtime_daily=1_578,
         full_attendance_bonus=1_600,
         labor_insurance_base=38_200,
         health_insurance_base=38_200,
         health_dependents=0,
         pension_base=38_200,
-        pension_self_contribute=True,   # 核定表確認：有自提6%
+        pension_self_contribute=False,  # 截圖確認：退休金自提=0
         daily_work_allowance=175,       # 45+50+50+30
     ),
 
@@ -269,13 +257,12 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         duty_allowance=2_700,
         other_allowance=4_680,
         position_allowance=8_590,
-        holiday_overtime_daily=1_665,
         full_attendance_bonus=1_600,
         labor_insurance_base=31_800,
         health_insurance_base=31_800,
         health_dependents=0,
         pension_base=31_800,
-        pension_self_contribute=False,
+        pension_self_contribute=True,   # 截圖確認：退休金自提6%=1908
         daily_work_allowance=135,       # 45+30+30+30
     ),
 
@@ -283,15 +270,14 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
     SalaryConfig(
         employee_id="29",
         name="許天賜",
-        base_salary=14_100,
+        base_salary=16_350,             # 截圖確認（非14100）
         duty_allowance=7_000,
         other_allowance=0,
         position_allowance=16_560,
-        holiday_overtime_daily=2_183,
         full_attendance_bonus=1_600,
         labor_insurance_base=42_000,
         health_insurance_base=42_000,
-        health_dependents=1,
+        health_dependents=0,            # 截圖確認：健保651=42000×5.17%×1×30%
         pension_base=42_000,
         pension_self_contribute=True,
         daily_work_allowance=245,       # 85+50+50+60
@@ -302,16 +288,15 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         employee_id="31",
         name="陳佩欣",
         base_salary=14_100,
-        duty_allowance=2_700,
+        duty_allowance=2_000,           # 截圖: 2067=2000/30*31
         other_allowance=1_120,
         position_allowance=10_680,
-        holiday_overtime_daily=1_551,
         full_attendance_bonus=1_600,
         labor_insurance_base=29_500,
         health_insurance_base=29_500,
-        health_dependents=0,
+        health_dependents=1,            # 截圖: 健保+眷屬1人=916
         pension_base=29_500,
-        pension_self_contribute=True,
+        pension_self_contribute=False,  # 截圖: 退休金=0
         daily_work_allowance=0,
     ),
 
@@ -323,7 +308,6 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         duty_allowance=2_700,
         other_allowance=3_580,
         position_allowance=8_770,
-        holiday_overtime_daily=1_617,
         full_attendance_bonus=1_600,
         labor_insurance_base=33_300,
         health_insurance_base=33_300,
@@ -341,7 +325,6 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         duty_allowance=2_700,
         other_allowance=2_000,
         position_allowance=9_600,
-        holiday_overtime_daily=1_578,
         full_attendance_bonus=1_600,
         labor_insurance_base=29_500,
         health_insurance_base=29_500,
@@ -359,16 +342,16 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         duty_allowance=2_700,
         other_allowance=2_300,
         position_allowance=10_500,
-        holiday_overtime_daily=1_641,
         full_attendance_bonus=1_600,
         labor_insurance_base=29_500,
         health_insurance_base=29_500,
         health_dependents=0,
         pension_base=29_500,
         pension_self_contribute=False,
-        daily_work_allowance=45,        # 45 (反推確認)
+        daily_work_allowance=95,        # 截圖確認: 2300+25×95=4675
+        meal_exempt=True,               # 截圖無便當扣款
         night_shift_daily=250,          # 夜班津貼/天
-        meal_allowance_daily=150,       # 伙食津貼/天
+        meal_allowance_daily=100,       # 截圖確認: 100×25=2500（非150）
     ),
 ]
 

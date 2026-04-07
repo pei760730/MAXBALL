@@ -1,89 +1,90 @@
 """
 主控同步程式
 ============
-Claude Code ↔ Google Sheets 雙向同步
+Google Sheets ↔ 薪資計算引擎 雙向同步
 
 執行流程：
-  1. 從 Google Sheets「便當訂購表」讀取當月打勾記錄
-  2. 計算每人便當費用
-  3. 從「員工設定表」讀取薪資核定資料
-  4. 從「出勤記錄表」讀取出勤資料
-  5. 計算每人當月薪資（含便當扣款）
-  6. 將薪資明細結果寫回「薪資計算表」
+  1. 從「員工設定」讀取薪資核定資料
+  2. 從「月出勤」讀取出勤資料
+  3. 從「便當訂購」讀取便當份數
+  4. 計算每人當月薪資
+  5. 將薪資明細寫回「薪資結算」
 
 用法：
-  python main_sync.py                          # 自動抓今年今月
-  python main_sync.py --year 2026 --month 3   # 指定年月
-  python main_sync.py --dry-run               # 只計算不寫回 Sheets
+  python main_sync.py --year 2026 --month 3
+  python main_sync.py --dry-run               # 只計算不寫回
 """
 
 import argparse
 import datetime
-from dataclasses import dataclass
 
-from sheets_client import connect, open_sheet_by_url, read_all, write_rows, update_cell
-from meal_tracker import parse_meal_sheet, summarize, print_summary, MEAL_PRICE_NORMAL, MEAL_PRICE_VEG
+from sheets_client import connect, read_all, write_rows
 from salary_calculator import SalaryConfig, AttendanceRecord, calculate_salary, SalaryResult
 
 # ──────────────────────────────────────────────────────────────
-# Google Sheets URL 設定（請替換成你的 Sheet URL）
+# Google Sheets 設定
 # ──────────────────────────────────────────────────────────────
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1s_Q1BrR-TcOF00vSyR0kPp0jVKuzeq85UfoDB2JS928/edit"
-
-# 各工作表名稱
-# 注意：現有分頁（核定/出勤/明細/總表）是鄧志展單人舊格式，保留不動
-# 以下是新增的全員多人分頁
-TAB_MEAL       = "便當訂購"    # 每月便當打勾表（全員）
-TAB_EMPLOYEE   = "員工設定"    # 薪資核定資料（全員，固定不常變動）
-TAB_ATTENDANCE = "月出勤"      # 每月出勤輸入（全員）
-TAB_SALARY_OUT = "薪資結算"    # 計算結果輸出（程式自動寫入，全員）
-
 CREDENTIALS_FILE = "service_account.json"
+
+TAB_EMPLOYEE   = "員工設定"
+TAB_ATTENDANCE = "月出勤"
+TAB_MEAL       = "便當訂購"
+TAB_SALARY_OUT = "薪資結算"
 
 
 # ──────────────────────────────────────────────────────────────
-# 從 Google Sheets 讀取員工設定
+# 從 Sheets 讀取員工設定（完整 SalaryConfig）
 # ──────────────────────────────────────────────────────────────
 def load_employee_configs(ws) -> list[SalaryConfig]:
     """
     讀取「員工設定」工作表，回傳 SalaryConfig 清單。
 
-    工作表格式（第 1 列為表頭）：
-      A: 員工編號 | B: 姓名 | C: 本薪 | D: 職務津貼 | E: 其他加給
-      F: 全勤獎金 | G: 勞保投保薪資 | H: 健保投保薪資 | I: 退休金投保薪資
-      J: 自提退休金(Y/N)
+    欄位對應（第 1 列為表頭）：
+      A: 員工編號  B: 姓名  C: 本薪  D: 職務津貼  E: 其他加給(固定)
+      F: 職務加給  G: 全勤獎金  H: 出勤加給/天  I: 夜班津貼/天  J: 伙食津貼/天
+      K: 勞保投保  L: 健保投保  M: 健保眷屬數  N: 退休金投保
+      O: 自提退休金(Y/N)  P: 不扣便當(Y/N)  Q: 不扣福利金(Y/N)
     """
     rows = read_all(ws)
     configs = []
-    for row in rows[1:]:  # 跳過表頭
+    for row in rows[1:]:
         if not row or not row[0].strip():
             continue
         try:
             configs.append(SalaryConfig(
                 employee_id=row[0].strip(),
                 name=row[1].strip(),
-                base_salary=_to_float(row[2]),
-                duty_allowance=_to_float(row[3]),
-                other_allowance=_to_float(row[4]),
-                full_attendance_bonus=_to_float(row[5]),
-                labor_insurance_base=_to_float(row[6]),
-                health_insurance_base=_to_float(row[7]),
-                pension_base=_to_float(row[8]),
-                pension_self_contribute=row[9].strip().upper() == "Y" if len(row) > 9 else False,
+                base_salary=_float(row, 2),
+                duty_allowance=_float(row, 3),
+                other_allowance=_float(row, 4),
+                position_allowance=_float(row, 5),
+                full_attendance_bonus=_float(row, 6),
+                daily_work_allowance=_float(row, 7),
+                night_shift_daily=_float(row, 8),
+                meal_allowance_daily=_float(row, 9),
+                labor_insurance_base=_float(row, 10),
+                health_insurance_base=_float(row, 11),
+                health_dependents=int(_float(row, 12)),
+                pension_base=_float(row, 13),
+                pension_self_contribute=_yn(row, 14),
+                meal_exempt=_yn(row, 15),
+                welfare_exempt=_yn(row, 16),
             ))
         except (IndexError, ValueError) as e:
-            print(f"[警告] 員工資料讀取錯誤（列 {row}）：{e}")
+            print(f"  [警告] 員工資料讀取錯誤（{row[:2]}）：{e}")
     return configs
 
 
-def load_attendance_records(ws, year: int, month: int) -> dict[str, AttendanceRecord]:
+def load_attendance(ws, year: int, month: int) -> dict[str, AttendanceRecord]:
     """
-    讀取「出勤記錄」工作表，回傳以姓名為 key 的 AttendanceRecord dict。
+    讀取「月出勤」工作表。
 
-    工作表格式（第 1 列為表頭）：
-      A: 姓名 | B: 曆日數 | C: 工作日 | D: 實際出勤日 | E: 假日加班日
-      F: 加班時數(1.33) | G: 加班時數(1.66) | H: 無薪假 | I: 病假 | J: 事假
-      K: 特休 | L: 有節金(Y/N)
+    欄位對應（第 1 列為表頭）：
+      A: 姓名  B: 曆日數  C: 工作日  D: 實際出勤  E: 假日加班日(六)
+      F: 週日加班日  G: 加班時數(1.33)  H: 加班時數(1.66)
+      I: 事假日  J: 病假日  K: 無薪假日  L: 特休日
+      M: 請假次數(扣全勤)  N: 有節金(Y/N)
     """
     rows = read_all(ws)
     records = {}
@@ -93,68 +94,92 @@ def load_attendance_records(ws, year: int, month: int) -> dict[str, AttendanceRe
         name = row[0].strip()
         try:
             records[name] = AttendanceRecord(
-                year=year,
-                month=month,
-                calendar_days=int(_to_float(row[1])),
-                work_days=int(_to_float(row[2])),
-                actual_work_days=_to_float(row[3]),
-                holiday_overtime_days=_to_float(row[4]) if len(row) > 4 else 0.0,
-                overtime_hours_1=_to_float(row[5]) if len(row) > 5 else 0.0,
-                overtime_hours_2=_to_float(row[6]) if len(row) > 6 else 0.0,
-                unpaid_leave_days=_to_float(row[7]) if len(row) > 7 else 0.0,
-                sick_leave_days=_to_float(row[8]) if len(row) > 8 else 0.0,
-                personal_leave_days=_to_float(row[9]) if len(row) > 9 else 0.0,
-                annual_leave_days=_to_float(row[10]) if len(row) > 10 else 0.0,
-                has_festival_bonus=row[11].strip().upper() == "Y" if len(row) > 11 else False,
+                year=year, month=month,
+                calendar_days=int(_float(row, 1)),
+                work_days=int(_float(row, 2)),
+                actual_work_days=_float(row, 3),
+                holiday_overtime_days=_float(row, 4),
+                sunday_overtime_days=_float(row, 5),
+                overtime_hours_1=_float(row, 6),
+                overtime_hours_2=_float(row, 7),
+                personal_leave_days=_float(row, 8),
+                sick_leave_days=_float(row, 9),
+                unpaid_leave_days=_float(row, 10),
+                annual_leave_days=_float(row, 11),
+                leave_instances=int(_float(row, 12)),
+                has_festival_bonus=_yn(row, 13),
             )
         except (IndexError, ValueError) as e:
-            print(f"[警告] 出勤資料讀取錯誤（{name}）：{e}")
+            print(f"  [警告] 出勤資料讀取錯誤（{name}）：{e}")
     return records
 
 
+def load_meal_counts(ws) -> dict[str, int]:
+    """
+    讀取「便當訂購」工作表，回傳 {姓名: 便當份數}。
+    第 A 欄為姓名，B~AF 為每天標記（V/素/X），最後欄或自動加總。
+    """
+    rows = read_all(ws)
+    counts = {}
+    for row in rows[1:]:
+        if not row or not row[0].strip():
+            continue
+        name = row[0].strip()
+        count = 0
+        for cell in row[1:]:
+            v = cell.strip().lower()
+            if v in ("v", "✓", "√", "ˇ", "素", "s"):
+                count += 1
+        counts[name] = count
+    return counts
+
+
 # ──────────────────────────────────────────────────────────────
-# 將薪資結果寫回 Google Sheets
+# 寫回薪資結算
 # ──────────────────────────────────────────────────────────────
 def write_salary_results(ws, results: list[SalaryResult], year: int, month: int):
-    """
-    將計算結果寫入「薪資明細」工作表。
-    每次執行會先寫入表頭，再依序寫入每位員工的明細。
-    """
+    """將計算結果寫入「薪資結算」工作表。"""
     header = [
         "年度", "月份", "姓名",
-        "本薪", "職務津貼", "其他加給", "全勤獎金",
-        "假日加班費", "延時加班(1.33)", "延時加班(1.66)", "節金",
+        "本薪", "職務津貼", "其他加給", "職務加給",
+        "全勤獎金", "假日加班費", "延時加班(1.33)", "延時加班(1.66)",
+        "夜班津貼", "伙食津貼", "節金",
         "應領合計",
-        "勞保費", "健保費", "退休金自提", "便當費", "扣除合計",
-        "實領薪資",
+        "勞保費", "健保費", "退休金自提", "福利金", "便當費",
+        "扣除合計", "實領薪資",
     ]
     rows_to_write = [header]
     for r in results:
         rows_to_write.append([
             year, month, r.name,
-            r.base_pay, r.duty_pay, r.other_pay, r.full_attendance_bonus,
-            r.holiday_overtime_pay, r.overtime_pay_1, r.overtime_pay_2, r.festival_bonus,
+            r.base_pay, r.duty_pay, r.other_pay, r.position_pay,
+            r.full_attendance_bonus, r.holiday_overtime_pay,
+            r.overtime_pay_1, r.overtime_pay_2,
+            r.night_shift_pay, r.meal_allowance_pay, r.festival_bonus,
             r.gross_income,
-            r.labor_insurance_fee, r.health_insurance_fee, r.pension_self, r.meal_deduction,
-            r.total_deduction,
-            r.net_salary,
+            r.labor_insurance_fee, r.health_insurance_fee,
+            r.pension_self, r.welfare_deduction, r.meal_deduction,
+            r.total_deduction, r.net_salary,
         ])
     ws.clear()
     write_rows(ws, rows_to_write, start_row=1)
-    print(f"[完成] 已將 {len(results)} 筆薪資明細寫入「薪資明細」工作表")
+    print(f"  已寫入 {len(results)} 筆薪資明細")
 
 
 # ──────────────────────────────────────────────────────────────
-# 工具函式
+# 工具
 # ──────────────────────────────────────────────────────────────
-def _to_float(value: str) -> float:
-    """將字串轉為 float，移除逗號與空白。"""
-    return float(str(value).replace(",", "").replace(" ", "") or 0)
+def _float(row: list, idx: int) -> float:
+    if idx >= len(row):
+        return 0.0
+    return float(str(row[idx]).replace(",", "").replace(" ", "") or 0)
 
+def _yn(row: list, idx: int) -> bool:
+    if idx >= len(row):
+        return False
+    return str(row[idx]).strip().upper() == "Y"
 
 def _open_tab(client, tab_name: str):
-    """用分頁名稱開啟工作表。"""
-    import gspread
     spreadsheet = client.open_by_url(SHEET_URL)
     return spreadsheet.worksheet(tab_name)
 
@@ -163,86 +188,59 @@ def _open_tab(client, tab_name: str):
 # 主流程
 # ──────────────────────────────────────────────────────────────
 def run(year: int, month: int, dry_run: bool = False):
-    """
-    主同步流程。
+    print(f"\n{'='*50}")
+    print(f"  MAXBALL 薪資系統  {year}年{month}月")
+    print(f"  模式：{'試算' if dry_run else '正式（寫回 Sheets）'}")
+    print(f"{'='*50}\n")
 
-    Args:
-        year: 處理年度
-        month: 處理月份
-        dry_run: True = 只計算，不寫回 Google Sheets
-    """
-    print(f"\n{'='*60}")
-    print(f"  MAXBALL 薪資同步系統  {year}年{month}月")
-    print(f"  便當單價：普通 {MEAL_PRICE_NORMAL} 元／素食 {MEAL_PRICE_VEG} 元")
-    print(f"  模式：{'試算（不寫回）' if dry_run else '正式執行（寫回 Sheets）'}")
-    print(f"{'='*60}\n")
-
-    # 1. 連線 Google Sheets
-    print("[1/5] 連線 Google Sheets ...")
     client = connect(CREDENTIALS_FILE)
 
-    # 2. 讀取便當訂購表
-    print("[2/5] 讀取便當訂購表 ...")
-    meal_ws   = _open_tab(client, TAB_MEAL)
-    meal_rows = read_all(meal_ws)
-    meal_records = parse_meal_sheet(meal_rows, header_rows=1)
-    meal_summary = summarize(meal_records)
-    print_summary(meal_summary, year, month)
+    # 1. 讀取員工設定
+    print("[1/4] 讀取員工設定 ...")
+    configs = load_employee_configs(_open_tab(client, TAB_EMPLOYEE))
+    print(f"  {len(configs)} 位員工")
 
-    # 3. 讀取員工設定
-    print("[3/5] 讀取員工薪資設定 ...")
-    emp_ws  = _open_tab(client, TAB_EMPLOYEE)
-    configs = load_employee_configs(emp_ws)
-    print(f"      讀取到 {len(configs)} 位員工設定")
+    # 2. 讀取出勤
+    print("[2/4] 讀取出勤記錄 ...")
+    attendances = load_attendance(_open_tab(client, TAB_ATTENDANCE), year, month)
+    print(f"  {len(attendances)} 筆出勤")
 
-    # 4. 讀取出勤記錄
-    print("[4/5] 讀取出勤記錄 ...")
-    att_ws     = _open_tab(client, TAB_ATTENDANCE)
-    attendances = load_attendance_records(att_ws, year, month)
-    print(f"      讀取到 {len(attendances)} 筆出勤記錄")
+    # 3. 讀取便當
+    print("[3/4] 讀取便當訂購 ...")
+    meal_counts = load_meal_counts(_open_tab(client, TAB_MEAL))
+    print(f"  {len(meal_counts)} 筆便當")
 
-    # 5. 計算薪資
-    print("[5/5] 計算薪資 ...")
-    meal_by_name = {r.name: r for r in meal_summary["records"]}
+    # 4. 計算薪資
+    print("[4/4] 計算薪資 ...")
     results = []
     for config in configs:
-        attendance = attendances.get(config.name)
-        if not attendance:
-            print(f"      [略過] {config.name}：無出勤記錄")
+        att = attendances.get(config.name)
+        if not att:
+            print(f"  [略過] {config.name}：無出勤記錄")
             continue
-        meal = meal_by_name.get(config.name)
-        result = calculate_salary(config, attendance, meal)
+        # 注入便當份數到 attendance
+        att.meal_count = meal_counts.get(config.name, 0)
+        result = calculate_salary(config, att)
         result.print_detail()
         results.append(result)
 
-    # 6. 寫回薪資明細（除非 dry_run）
+    # 寫回
     if not dry_run:
-        print("[寫回] 將薪資明細寫入 Google Sheets ...")
-        salary_ws = _open_tab(client, TAB_SALARY_OUT)
-        write_salary_results(salary_ws, results, year, month)
+        print("\n[寫回] 薪資結算 ...")
+        write_salary_results(_open_tab(client, TAB_SALARY_OUT), results, year, month)
 
-        # 同步便當合計回便當表
-        print("[寫回] 同步便當合計至便當訂購表 ...")
-        from meal_tracker import write_summary_to_sheet
-        write_summary_to_sheet(meal_ws, meal_summary)
-    else:
-        print("\n[試算模式] 未寫回 Google Sheets")
-
-    print(f"\n{'='*60}")
-    print(f"  完成！共處理 {len(results)} 位員工")
-    print(f"  全廠便當費合計：{meal_summary['total_cost']:,} 元")
     net_total = sum(r.net_salary for r in results)
-    print(f"  全廠實領薪資合計：{net_total:,.0f} 元")
-    print(f"{'='*60}\n")
-
-    return results, meal_summary
+    print(f"\n{'='*50}")
+    print(f"  完成：{len(results)} 位，實領合計 {net_total:,.0f} 元")
+    print(f"{'='*50}\n")
+    return results
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="MAXBALL 薪資便當同步系統")
+    parser = argparse.ArgumentParser(description="MAXBALL 薪資系統")
     now = datetime.date.today()
-    parser.add_argument("--year",    type=int, default=now.year,  help="年度（預設本年）")
-    parser.add_argument("--month",   type=int, default=now.month, help="月份（預設本月）")
-    parser.add_argument("--dry-run", action="store_true",          help="試算模式，不寫回 Sheets")
+    parser.add_argument("--year",    type=int, default=now.year)
+    parser.add_argument("--month",   type=int, default=now.month)
+    parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     run(args.year, args.month, args.dry_run)

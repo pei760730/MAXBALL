@@ -34,8 +34,8 @@ class SalaryConfig:
     pension_base: float             # 退休金投保薪資
     pension_self_contribute: bool = False   # 是否自提 6%
     meal_exempt: bool = False               # 不訂便當（不扣便當費）
+    welfare_exempt: bool = False            # 不扣福利金
     health_dependents: int = 0             # 健保眷屬人數
-    holiday_overtime_daily: float = 0.0    # 假日加班固定日費
     daily_work_allowance: float = 0.0      # 出勤加給/天（基本工資差額補貼）
     night_shift_daily: float = 0.0         # 夜班津貼/天（依實際上班天含六日）
     meal_allowance_daily: float = 0.0      # 伙食津貼/天（依實際上班天含六日）
@@ -161,16 +161,20 @@ def calculate_salary(config: SalaryConfig, attendance: AttendanceRecord) -> Sala
     # ── 4. 全勤獎金（每次事假/病假扣 300，特休不扣，最多扣至 0）──
     r.full_attendance_bonus = max(0, config.full_attendance_bonus - attendance.leave_instances * FULL_ATTENDANCE_DEDUCT)
 
-    # ── 5. 假日加班費（週六/休息日）──
-    r.holiday_overtime_pay = round(config.holiday_overtime_daily * attendance.holiday_overtime_days)
-
-    # ── 6. 延時加班費（時薪基準 = 月薪基礎 ÷ 240 × 倍率）──
+    # ── 5. 加班費共用基數 ──
     overtime_base = (
         config.base_salary + config.duty_allowance + config.other_allowance
         + config.full_attendance_bonus + config.position_allowance
     )
-    front_rate = round(overtime_base / OVERTIME_DIVISOR * OVERTIME_RATE_FRONT)
-    back_rate  = round(overtime_base / OVERTIME_DIVISOR * OVERTIME_RATE_BACK)
+    hourly_base = overtime_base / OVERTIME_DIVISOR
+
+    # ── 5a. 假日加班費（週六/休息日，8小時: 前2hr×1.33 + 後6hr×1.66）──
+    holiday_daily = hourly_base * (OVERTIME_RATE_FRONT * 2 + OVERTIME_RATE_BACK * 6)
+    r.holiday_overtime_pay = round(holiday_daily * attendance.holiday_overtime_days)
+
+    # ── 5b. 延時加班費（平日）──
+    front_rate = round(hourly_base * OVERTIME_RATE_FRONT)
+    back_rate  = round(hourly_base * OVERTIME_RATE_BACK)
     r.overtime_pay_1 = round(front_rate * attendance.overtime_hours_1)
     r.overtime_pay_2 = round(back_rate  * attendance.overtime_hours_2)
 
@@ -210,7 +214,7 @@ def calculate_salary(config: SalaryConfig, attendance: AttendanceRecord) -> Sala
     )
 
     # ── 11. 福利金 ──
-    r.welfare_deduction = min(WELFARE_CAP, round(r.gross_income * WELFARE_RATE))
+    r.welfare_deduction = 0 if config.welfare_exempt else min(WELFARE_CAP, round(r.gross_income * WELFARE_RATE))
 
     # ── 12. 便當費 ──
     if not config.meal_exempt and attendance.meal_count > 0:
