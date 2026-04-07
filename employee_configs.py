@@ -303,16 +303,16 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         employee_id="31",
         name="陳佩欣",
         base_salary=14_100,
-        duty_allowance=2_700,
+        duty_allowance=2_000,           # 截圖: 2067=2000/30*31
         other_allowance=1_120,
         position_allowance=10_680,
         holiday_overtime_daily=1_551,
         full_attendance_bonus=1_600,
         labor_insurance_base=29_500,
         health_insurance_base=29_500,
-        health_dependents=0,
+        health_dependents=1,            # 截圖: 健保+眷屬1人=916
         pension_base=29_500,
-        pension_self_contribute=True,
+        pension_self_contribute=False,  # 截圖: 退休金=0
         daily_work_allowance=0,
     ),
 
@@ -367,9 +367,10 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         health_dependents=0,
         pension_base=29_500,
         pension_self_contribute=False,
-        daily_work_allowance=45,        # 45 (反推確認)
+        daily_work_allowance=95,        # 截圖確認: 2300+25×95=4675
+        meal_exempt=True,               # 截圖無便當扣款
         night_shift_daily=250,          # 夜班津貼/天
-        meal_allowance_daily=150,       # 伙食津貼/天
+        meal_allowance_daily=100,       # 截圖確認: 100×25=2500（非150）
     ),
 ]
 

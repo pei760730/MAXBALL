@@ -235,6 +235,47 @@ CASES = [
         },
         "notes": "特休3.5天, base=16350, dep=0, 其他加給取整差1(Python銀行家vs傳統四捨五入)",
     },
+    {
+        "name": "陳佩欣",
+        "month": "2026-03",
+        "target": 27888,
+        "tolerance": 1,
+        "attendance": {
+            "calendar_days": 31, "work_days": 22,
+            "actual_work_days": 21.0,
+            "annual_leave_days": 1.0,
+            "meal_count": 13,
+        },
+        "notes": "特休1天, duty=2000, dep=1(健保916差1), pension=False",
+    },
+    {
+        "name": "吳慧娟",
+        "month": "2026-03",
+        "target": 32563,
+        "tolerance": 1,
+        "attendance": {
+            "calendar_days": 31, "work_days": 22,
+            "actual_work_days": 19.0,
+            "annual_leave_days": 3.0,
+            "meal_count": 0,
+        },
+        "notes": "特休3天, 勞保832vs833差1. 截圖實領31975含特殊扣588(勞退健保自付)",
+    },
+    {
+        "name": "莊志成",
+        "month": "2026-03",
+        "target": 63377,
+        "tolerance": 0,
+        "attendance": {
+            "calendar_days": 31, "work_days": 22,
+            "actual_work_days": 22.0,
+            "holiday_overtime_days": 3.0,
+            "overtime_hours_1": 44.0,
+            "overtime_hours_2": 44.0,
+            "meal_count": 0,
+        },
+        "notes": "dwa=95, 夜班250×25, 伙食100×25, 前段44hr+後段44hr, 假日3天. 截圖實領53377含代扣互展10000",
+    },
 ]
 
 
