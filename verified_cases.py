@@ -160,6 +160,31 @@ CASES = [
         },
         "notes": "前段50hr+後段60hr, 假日加班4天=9802, meal_exempt, pension自提6%",
     },
+    {
+        "name": "陳沛思",
+        "month": "2026-03",
+        "target": 34150,
+        "tolerance": 0,
+        "attendance": {
+            "calendar_days": 31, "work_days": 22,
+            "actual_work_days": 22.0,
+            "meal_count": 0,
+        },
+        "notes": "22天全勤, welfare_exempt=True(家族), 無便當",
+    },
+    {
+        "name": "莊明燦",
+        "month": "2026-03",
+        "target": 30359,
+        "tolerance": 0,
+        "attendance": {
+            "calendar_days": 31, "work_days": 22,
+            "actual_work_days": 21.5,
+            "annual_leave_days": 0.5,
+            "meal_count": 22,
+        },
+        "notes": "特休0.5天, 勞保=0(免繳), pension自提6% base=30300",
+    },
 ]
 
 

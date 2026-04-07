@@ -168,6 +168,7 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         pension_base=34_800,
         pension_self_contribute=False,
         daily_work_allowance=0,
+        welfare_exempt=True,            # 家族成員，不扣福利金
     ),
 
     # ── #17 簡宜君 ── 薪資已達標，無需加給
@@ -216,7 +217,7 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         position_allowance=13_120,
         holiday_overtime_daily=1_665,
         full_attendance_bonus=1_600,
-        labor_insurance_base=30_300,
+        labor_insurance_base=0,             # 免繳勞保（截圖勞保=0）
         health_insurance_base=30_300,
         health_dependents=0,
         pension_base=30_300,

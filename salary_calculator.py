@@ -34,6 +34,7 @@ class SalaryConfig:
     pension_base: float             # 退休金投保薪資
     pension_self_contribute: bool = False   # 是否自提 6%
     meal_exempt: bool = False               # 不訂便當（不扣便當費）
+    welfare_exempt: bool = False            # 不扣福利金
     health_dependents: int = 0             # 健保眷屬人數
     holiday_overtime_daily: float = 0.0    # 假日加班固定日費
     daily_work_allowance: float = 0.0      # 出勤加給/天（基本工資差額補貼）
@@ -214,7 +215,7 @@ def calculate_salary(config: SalaryConfig, attendance: AttendanceRecord) -> Sala
     )
 
     # ── 11. 福利金 ──
-    r.welfare_deduction = min(WELFARE_CAP, round(r.gross_income * WELFARE_RATE))
+    r.welfare_deduction = 0 if config.welfare_exempt else min(WELFARE_CAP, round(r.gross_income * WELFARE_RATE))
 
     # ── 12. 便當費 ──
     if not config.meal_exempt and attendance.meal_count > 0:
