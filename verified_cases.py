@@ -13,45 +13,7 @@
 
 from salary_calculator import calculate_salary, AttendanceRecord, SalaryConfig
 from employee_configs import CONFIGS_BY_NAME
-
-
-# ──────────────────────────────────────────────
-# 已確認規則（從驗證中沉澱）
-# ──────────────────────────────────────────────
-CONFIRMED_RULES = {
-    "base_duty_formula": {
-        "rule": "本薪÷30×曆日, 職務津貼÷30×曆日（不受請假影響）",
-        "verified_by": ["許柏凱#13", "林義明#18", "劉英美#39"],
-    },
-    "annual_leave_no_deduct": {
-        "rule": "特休不扣全勤、不扣職務加給，只減少 actual_work_days 影響每日加給",
-        "verified_by": ["林義明#18（特休1天, 全勤1600不扣, exact 36687）"],
-    },
-    "pension_annual_leave": {
-        "rule": "退休金自提：特休視為出勤，effective_days = actual + annual_leave",
-        "verified_by": ["許清輝#10（特休1天, ratio=1.0, diff=-1）"],
-    },
-    "overtime_base_240": {
-        "rule": "加班時薪 = (本薪+職務津貼+其他加給固定+全勤+職務加給) ÷ 240 × 倍率",
-        "verified_by": ["鄧志展#11（diff=-2）"],
-    },
-    "meal_exempt": {
-        "rule": "meal_exempt=True 的員工永遠不扣便當費",
-        "verified_by": ["陳姿惠#14（exact 33800）"],
-    },
-    "daily_work_allowance": {
-        "rule": "其他加給 = 固定加給 + (actual_work_days + holiday_ot_days) × dwa",
-        "verified_by": ["王靖銘#5（dwa=235, exact 50375）", "許柏凱#13（dwa=175, exact 34262）"],
-    },
-    "holiday_ot_rounding": {
-        "rule": "假日加班費 = round(hourly × (1.33×2+1.66×6) × 天數)，不先round每天",
-        "verified_by": ["鄧志展#11（4天=9802, 先round會少2元）"],
-    },
-    "health_insurance_formula": {
-        "rule": "健保費 = 投保薪資 × 5.17% × (1+眷屬) × 30%，可能與查表有1-2元差",
-        "verified_by": ["鄧志展#11（exact 943）", "許清輝#10（diff=-1）"],
-    },
-}
+from rules import RULES, check_all
 
 
 # ──────────────────────────────────────────────
@@ -86,7 +48,7 @@ CASES = [
         "name": "許清輝",
         "month": "2026-03",
         "target": 36233,
-        "tolerance": 1,  # 健保查表差異
+        "tolerance": 0,  # ROUND_HALF_UP 已修正（原差 -1 為 Python 銀行家捨入）
         "attendance": {
             "calendar_days": 31, "work_days": 22,
             "actual_work_days": 21.0,
@@ -226,14 +188,14 @@ CASES = [
         "name": "許天賜",
         "month": "2026-03",
         "target": 41980,
-        "tolerance": 1,
+        "tolerance": 0,  # ROUND_HALF_UP 已修正（其他加給 .5 邊界）
         "attendance": {
             "calendar_days": 31, "work_days": 22,
             "actual_work_days": 18.5,
             "annual_leave_days": 3.5,
             "meal_count": 18,
         },
-        "notes": "特休3.5天, base=16350, dep=0, 其他加給取整差1(Python銀行家vs傳統四捨五入)",
+        "notes": "特休3.5天, base=16350, dep=0",
     },
     {
         "name": "陳佩欣",
@@ -246,20 +208,20 @@ CASES = [
             "annual_leave_days": 1.0,
             "meal_count": 13,
         },
-        "notes": "特休1天, duty=2000, dep=1(健保916差1), pension=False",
+        "notes": "特休1天, duty=2000, dep=1; 殘差+1 為健保局查表 vs 公式差異（非捨入）",
     },
     {
         "name": "吳慧娟",
         "month": "2026-03",
         "target": 32563,
-        "tolerance": 1,
+        "tolerance": 0,  # ROUND_HALF_UP 已修正（勞保 33300×2.5%=832.5 邊界）
         "attendance": {
             "calendar_days": 31, "work_days": 22,
             "actual_work_days": 19.0,
             "annual_leave_days": 3.0,
             "meal_count": 0,
         },
-        "notes": "特休3天, 勞保832vs833差1. 截圖實領31975含特殊扣588(勞退健保自付)",
+        "notes": "特休3天. 截圖實領31975含特殊扣588(勞退健保自付)",
     },
     {
         "name": "莊志成",
@@ -283,9 +245,13 @@ CASES = [
 # 執行驗證
 # ──────────────────────────────────────────────
 def run_all(verbose: bool = False) -> bool:
-    """執行所有驗證案例，回傳是否全部通過。"""
+    """
+    執行所有驗證案例 + 規則不變式檢查。
+    回傳：全部 case 通過 AND 無任何規則破損。
+    """
     passed = 0
     failed = 0
+    rule_violations = 0
 
     for case in CASES:
         config = CONFIGS_BY_NAME[case["name"]]
@@ -299,7 +265,11 @@ def run_all(verbose: bool = False) -> bool:
         result = calculate_salary(config, att)
 
         diff = abs(result.net_salary - case["target"])
-        ok = diff <= case["tolerance"]
+        value_ok = diff <= case["tolerance"]
+
+        violations = check_all(config, att, result)
+        rule_ok = len(violations) == 0
+        ok = value_ok and rule_ok
 
         if ok:
             passed += 1
@@ -311,17 +281,20 @@ def run_all(verbose: bool = False) -> bool:
         print(f"  {mark} {case['name']}: {result.net_salary:.0f} vs {case['target']} "
               f"(diff={result.net_salary - case['target']:+.0f}, tol={case['tolerance']})")
 
+        if violations:
+            rule_violations += len(violations)
+            for rid, msg in violations:
+                print(f"      ⚠ rule '{rid}': {msg}")
+
         if verbose and not ok:
             result.print_detail()
 
     print(f"\n  結果: {passed} 通過, {failed} 失敗 (共 {len(CASES)} 案例)")
+    print(f"  規則不變式: {len(RULES)} 條, 破損 {rule_violations} 次")
+    for rule in RULES:
+        print(f"    - [{rule.id}] {rule.describe}")
 
-    if CONFIRMED_RULES:
-        print(f"\n  已確認規則: {len(CONFIRMED_RULES)} 條")
-        for key, rule in CONFIRMED_RULES.items():
-            print(f"    - {rule['rule']}")
-
-    return failed == 0
+    return failed == 0 and rule_violations == 0
 
 
 if __name__ == "__main__":
