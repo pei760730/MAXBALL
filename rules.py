@@ -22,10 +22,11 @@ verified_cases 在每個 case 跑完 calculate_salary 後逐條檢查。
 from dataclasses import dataclass
 from typing import Callable, Optional, List, Tuple
 
-from salary_calculator import SalaryConfig, AttendanceRecord, SalaryResult, _r
+from salary_calculator import (
+    SalaryConfig, AttendanceRecord, SalaryResult, _r, health_insurance_fee,
+)
 from constants import (
     OVERTIME_DIVISOR, OVERTIME_RATE_FRONT, OVERTIME_RATE_BACK,
-    HEALTH_INSURANCE_RATE, HEALTH_EMPLOYEE_SHARE,
     PENSION_SELF_RATE, WELFARE_RATE, WELFARE_CAP,
 )
 
@@ -144,14 +145,12 @@ def _holiday_ot_rounding(c, a, r):
 
 
 def _health_insurance_formula(c, a, r):
-    # 註：此為公式值；健保局查表可能差 ±1 元，verified_cases 以 tolerance 處理。
-    exp = _r(
-        c.health_insurance_base * HEALTH_INSURANCE_RATE
-        * (1 + c.health_dependents) * HEALTH_EMPLOYEE_SHARE
-    )
+    # 引擎與規則共用 health_insurance_fee helper（單一 swap 點）。
+    # 健保局查表可能與公式差 ±1 元，verified_cases 以 tolerance 處理。
+    exp = health_insurance_fee(c)
     return _ok(
         r.health_insurance_fee == exp,
-        f"health insurance formula broken: got {r.health_insurance_fee}, exp {exp}",
+        f"health insurance broken: got {r.health_insurance_fee}, exp {exp}",
     )
 
 

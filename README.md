@@ -1,6 +1,7 @@
-# MAXBALL - Google Sheets 整合工具
+# MAXBALL — 薪資計算系統
 
-使用 Python 讀寫 Google Sheets 的工具專案。
+Google Sheets 為輸入/輸出介面，Python 純函數引擎為核心，
+規則不變式 (`rules.py`) 維持語義契約，回歸案例 (`verified_cases.py`) 守金額正確性。
 
 ---
 
@@ -34,9 +35,14 @@
 # 安裝 Python 套件
 pip install -r requirements.txt
 
-# 修改 example.py 中的 Sheet 名稱或 URL
-# 然後執行
-python example.py
+# 跑回歸測試（17 案例 + 11 條規則不變式）
+python verified_cases.py
+
+# 實際結算某月（讀 Sheets → 算薪資 → 寫回）
+python main_sync.py --year 2026 --month 3
+
+# 只試算不寫回
+python main_sync.py --year 2026 --month 3 --dry-run
 ```
 
 ---
@@ -45,26 +51,25 @@ python example.py
 
 ```
 MAXBALL/
-├── sheets_client.py    # Google Sheets 連線與讀寫模組
-├── example.py          # 使用範例
-├── requirements.txt    # Python 套件清單
-├── .gitignore          # Git 忽略清單（會排除金鑰檔案）
-└── README.md           # 本文件
+├── constants.py           # 公司鐵律常數（費率、倍率、上限）
+├── salary_calculator.py   # 純函數計算引擎 f(Config, Attendance) → Result
+├── rules.py               # 可執行規則不變式（sediment layer）
+├── employee_configs.py    # 員工 SalaryConfig（hard-coded）
+├── verified_cases.py      # 回歸案例 + 跑 rules 不變式
+├── main_sync.py           # Google Sheets ↔ 引擎同步（含 header 驗證）
+├── sheets_schema.py       # 建立 Sheet 分頁結構
+├── sheets_client.py       # gspread 薄封裝
+├── _archive/              # 舊 seed/debug 腳本（不再於 CI 呼叫）
+└── .github/workflows/     # sync_sheets / read_sheets（workflow_dispatch）
 ```
 
-## 主要功能
+## 規則沉澱架構
 
-| 函式 | 說明 |
-|------|------|
-| `connect()` | 使用 Service Account 連線 |
-| `open_sheet()` | 用名稱開啟 Google Sheet |
-| `open_sheet_by_url()` | 用 URL 開啟 Google Sheet |
-| `read_all()` | 讀取所有資料（二維 list） |
-| `read_as_dicts()` | 讀取資料為 dict list |
-| `write_row()` | 寫入一列 |
-| `write_rows()` | 批次寫入多列 |
-| `update_cell()` | 更新單一儲存格 |
-| `clear_worksheet()` | 清空工作表 |
+- **公式常數**：只在 `constants.py` 出現一次。
+- **引擎**：`salary_calculator.calculate_salary` 純函數，`_r()` 使用 `ROUND_HALF_UP`。
+- **健保費 swap 點**：`salary_calculator.health_insurance_fee(config)`；未來接健保局查表，只改這一個函數。
+- **規則不變式**：`rules.RULES` 每條 = predicate + 首次驗證它的 case 名單；跑 `verified_cases.py` 會一併檢查。
+- **CI**：`.github/workflows/sync_sheets.yml` 接受 `year` / `month` / `dry_run` inputs，跑回歸後才寫回。
 
 ## 安全提醒
 

@@ -34,6 +34,41 @@ TAB_SALARY_OUT = "薪資結算"
 
 
 # ──────────────────────────────────────────────────────────────
+# Header 驗證（schema drift → fail loud，不再 silently 0 賠錢）
+# ──────────────────────────────────────────────────────────────
+EMPLOYEE_HEADER_KEYWORDS = [
+    "編號", "姓名", "本薪", "職務津貼", "其他加給", "職務加給", "全勤",
+    "出勤加給", "夜班", "伙食", "勞保", "健保投保", "眷屬",
+    "退休金投保", "自提", "便當", "福利金",
+]
+
+ATTENDANCE_HEADER_KEYWORDS = [
+    "姓名", "曆日", "工作日", "實際出勤", "假日加班", "週日加班",
+    "1.33", "1.66", "事假", "病假", "無薪", "特休", "全勤", "節金",
+]
+
+
+def _col_letter(idx: int) -> str:
+    # 0→A, 1→B, ..., 25→Z, 26→AA 略
+    return chr(ord("A") + idx) if idx < 26 else f"col{idx+1}"
+
+
+def _validate_header(header_row, expected_keywords, sheet_name):
+    """每個預期關鍵字必須以 substring 形式出現在對應欄的 header；否則 raise。"""
+    if len(header_row) < len(expected_keywords):
+        raise ValueError(
+            f"{sheet_name}: header 僅 {len(header_row)} 欄，預期 ≥ {len(expected_keywords)} 欄"
+        )
+    for i, kw in enumerate(expected_keywords):
+        cell = (header_row[i] or "").strip()
+        if kw not in cell:
+            raise ValueError(
+                f"{sheet_name}: 第 {i+1} 欄 ({_col_letter(i)}) 預期含 '{kw}'，實際為 '{cell}'；"
+                f"若 Sheet 欄位順序已變動，請同步更新 {sheet_name} 的讀取邏輯。"
+            )
+
+
+# ──────────────────────────────────────────────────────────────
 # 從 Sheets 讀取員工設定（完整 SalaryConfig）
 # ──────────────────────────────────────────────────────────────
 def load_employee_configs(ws) -> list[SalaryConfig]:
@@ -45,8 +80,13 @@ def load_employee_configs(ws) -> list[SalaryConfig]:
       F: 職務加給  G: 全勤獎金  H: 出勤加給/天  I: 夜班津貼/天  J: 伙食津貼/天
       K: 勞保投保  L: 健保投保  M: 健保眷屬數  N: 退休金投保
       O: 自提退休金(Y/N)  P: 不扣便當(Y/N)  Q: 不扣福利金(Y/N)
+
+    欄位若漂移 → header 驗證直接 raise，不再 silently 讀到 0。
     """
     rows = read_all(ws)
+    if not rows:
+        raise ValueError("員工設定: 空白工作表")
+    _validate_header(rows[0], EMPLOYEE_HEADER_KEYWORDS, "員工設定")
     configs = []
     for row in rows[1:]:
         if not row or not row[0].strip():
@@ -85,8 +125,13 @@ def load_attendance(ws, year: int, month: int) -> dict[str, AttendanceRecord]:
       F: 週日加班日  G: 加班時數(1.33)  H: 加班時數(1.66)
       I: 事假日  J: 病假日  K: 無薪假日  L: 特休日
       M: 請假次數(扣全勤)  N: 有節金(Y/N)
+
+    欄位若漂移 → header 驗證直接 raise，不再 silently 讀到 0。
     """
     rows = read_all(ws)
+    if not rows:
+        raise ValueError("月出勤: 空白工作表")
+    _validate_header(rows[0], ATTENDANCE_HEADER_KEYWORDS, "月出勤")
     records = {}
     for row in rows[1:]:
         if not row or not row[0].strip():
