@@ -1,13 +1,14 @@
 """
 主控同步程式
 ============
-Google Sheets ↔ 薪資計算引擎 雙向同步
+員工設定 來自 employee_configs.py（唯一權威源，版本控管於 Python）。
+出勤 / 便當 來自 Google Sheets。計算結果寫回 Sheets。
 
 執行流程：
-  1. 從「員工設定」讀取薪資核定資料
+  1. 載入員工設定（Python）
   2. 從「月出勤」讀取出勤資料
   3. 從「便當訂購」讀取便當份數
-  4. 計算每人當月薪資
+  4. 校驗出勤（姓名比對 + 值域檢查）→ 計算薪資
   5. 將薪資明細寫回「薪資結算」
 
 用法：
@@ -20,6 +21,7 @@ import datetime
 
 from sheets_client import connect, read_all, write_rows
 from salary_calculator import SalaryConfig, AttendanceRecord, calculate_salary, SalaryResult
+from employee_configs import EMPLOYEE_CONFIGS
 
 # ──────────────────────────────────────────────────────────────
 # Google Sheets 設定
@@ -27,7 +29,6 @@ from salary_calculator import SalaryConfig, AttendanceRecord, calculate_salary, 
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1s_Q1BrR-TcOF00vSyR0kPp0jVKuzeq85UfoDB2JS928/edit"
 CREDENTIALS_FILE = "service_account.json"
 
-TAB_EMPLOYEE   = "員工設定"
 TAB_ATTENDANCE = "月出勤"
 TAB_MEAL       = "便當訂購"
 TAB_SALARY_OUT = "薪資結算"
@@ -36,12 +37,6 @@ TAB_SALARY_OUT = "薪資結算"
 # ──────────────────────────────────────────────────────────────
 # Header 驗證（schema drift → fail loud，不再 silently 0 賠錢）
 # ──────────────────────────────────────────────────────────────
-EMPLOYEE_HEADER_KEYWORDS = [
-    "編號", "姓名", "本薪", "職務津貼", "其他加給", "職務加給", "全勤",
-    "出勤加給", "夜班", "伙食", "勞保", "健保投保", "眷屬",
-    "退休金投保", "自提", "便當", "福利金",
-]
-
 ATTENDANCE_HEADER_KEYWORDS = [
     "姓名", "曆日", "工作日", "實際出勤", "假日加班", "週日加班",
     "1.33", "1.66", "事假", "病假", "無薪", "特休", "全勤", "節金",
@@ -66,54 +61,6 @@ def _validate_header(header_row, expected_keywords, sheet_name):
                 f"{sheet_name}: 第 {i+1} 欄 ({_col_letter(i)}) 預期含 '{kw}'，實際為 '{cell}'；"
                 f"若 Sheet 欄位順序已變動，請同步更新 {sheet_name} 的讀取邏輯。"
             )
-
-
-# ──────────────────────────────────────────────────────────────
-# 從 Sheets 讀取員工設定（完整 SalaryConfig）
-# ──────────────────────────────────────────────────────────────
-def load_employee_configs(ws) -> list[SalaryConfig]:
-    """
-    讀取「員工設定」工作表，回傳 SalaryConfig 清單。
-
-    欄位對應（第 1 列為表頭）：
-      A: 員工編號  B: 姓名  C: 本薪  D: 職務津貼  E: 其他加給(固定)
-      F: 職務加給  G: 全勤獎金  H: 出勤加給/天  I: 夜班津貼/天  J: 伙食津貼/天
-      K: 勞保投保  L: 健保投保  M: 健保眷屬數  N: 退休金投保
-      O: 自提退休金(Y/N)  P: 不扣便當(Y/N)  Q: 不扣福利金(Y/N)
-
-    欄位若漂移 → header 驗證直接 raise，不再 silently 讀到 0。
-    """
-    rows = read_all(ws)
-    if not rows:
-        raise ValueError("員工設定: 空白工作表")
-    _validate_header(rows[0], EMPLOYEE_HEADER_KEYWORDS, "員工設定")
-    configs = []
-    for row in rows[1:]:
-        if not row or not row[0].strip():
-            continue
-        try:
-            configs.append(SalaryConfig(
-                employee_id=row[0].strip(),
-                name=row[1].strip(),
-                base_salary=_float(row, 2),
-                duty_allowance=_float(row, 3),
-                other_allowance=_float(row, 4),
-                position_allowance=_float(row, 5),
-                full_attendance_bonus=_float(row, 6),
-                daily_work_allowance=_float(row, 7),
-                night_shift_daily=_float(row, 8),
-                meal_allowance_daily=_float(row, 9),
-                labor_insurance_base=_float(row, 10),
-                health_insurance_base=_float(row, 11),
-                health_dependents=int(_float(row, 12)),
-                pension_base=_float(row, 13),
-                pension_self_contribute=_yn(row, 14),
-                meal_exempt=_yn(row, 15),
-                welfare_exempt=_yn(row, 16),
-            ))
-        except (IndexError, ValueError) as e:
-            print(f"  [警告] 員工資料讀取錯誤（{row[:2]}）：{e}")
-    return configs
 
 
 def load_attendance(ws, year: int, month: int) -> dict[str, AttendanceRecord]:
@@ -180,6 +127,40 @@ def load_meal_counts(ws) -> dict[str, int]:
 
 
 # ──────────────────────────────────────────────────────────────
+# 出勤資料校驗（姓名比對 + 值域檢查；[錯誤] 開頭即中止）
+# ──────────────────────────────────────────────────────────────
+def validate_attendance(configs: list[SalaryConfig],
+                        attendances: dict[str, AttendanceRecord]) -> list[str]:
+    """回傳訊息列表；含 `[錯誤]` 前綴者視為致命，由 run() 判斷是否中止。"""
+    messages: list[str] = []
+    config_names = {c.name for c in configs}
+    att_names = set(attendances.keys())
+
+    # 姓名比對：configs 多出 → 有人漏填出勤；attendance 多出 → 姓名打錯或該人不在 config
+    missing_att = config_names - att_names
+    extra_att = att_names - config_names
+    if missing_att:
+        messages.append(f"[警告] 員工無出勤記錄：{', '.join(sorted(missing_att))}")
+    if extra_att:
+        messages.append(f"[錯誤] 出勤表有不明姓名（typo 或未登錄員工）：{', '.join(sorted(extra_att))}")
+
+    # 值域檢查
+    for name, att in attendances.items():
+        if not (28 <= att.calendar_days <= 31):
+            messages.append(f"[錯誤] {name} 曆日={att.calendar_days}（應 28-31）")
+        if not (0 <= att.work_days <= att.calendar_days):
+            messages.append(f"[錯誤] {name} 工作日={att.work_days}（應 ≤ 曆日 {att.calendar_days}）")
+        if att.actual_work_days < 0 or att.actual_work_days > att.work_days:
+            messages.append(f"[警告] {name} 實際出勤={att.actual_work_days}（工作日={att.work_days}）")
+        if att.overtime_hours_1 < 0 or att.overtime_hours_2 < 0:
+            messages.append(f"[錯誤] {name} 加班時數為負數")
+        if att.holiday_overtime_days < 0 or att.sunday_overtime_days < 0:
+            messages.append(f"[錯誤] {name} 假日/週日加班日為負數")
+
+    return messages
+
+
+# ──────────────────────────────────────────────────────────────
 # 寫回薪資結算
 # ──────────────────────────────────────────────────────────────
 def write_salary_results(ws, results: list[SalaryResult], year: int, month: int):
@@ -238,12 +219,11 @@ def run(year: int, month: int, dry_run: bool = False):
     print(f"  模式：{'試算' if dry_run else '正式（寫回 Sheets）'}")
     print(f"{'='*50}\n")
 
-    client = connect(CREDENTIALS_FILE)
+    # 1. 員工設定：Python 為唯一權威源
+    configs = EMPLOYEE_CONFIGS
+    print(f"[1/4] 員工設定：{len(configs)} 位（來源：employee_configs.py）")
 
-    # 1. 讀取員工設定
-    print("[1/4] 讀取員工設定 ...")
-    configs = load_employee_configs(_open_tab(client, TAB_EMPLOYEE))
-    print(f"  {len(configs)} 位員工")
+    client = connect(CREDENTIALS_FILE)
 
     # 2. 讀取出勤
     print("[2/4] 讀取出勤記錄 ...")
@@ -255,15 +235,21 @@ def run(year: int, month: int, dry_run: bool = False):
     meal_counts = load_meal_counts(_open_tab(client, TAB_MEAL))
     print(f"  {len(meal_counts)} 筆便當")
 
+    # 3.5 校驗出勤資料（姓名比對 + 值域）→ 致命錯誤直接中止
+    msgs = validate_attendance(configs, attendances)
+    for m in msgs:
+        print(f"  {m}")
+    if any(m.startswith("[錯誤]") for m in msgs):
+        print("\n  出勤資料有致命錯誤，中止計算。請修正 Sheet 後重試。")
+        return []
+
     # 4. 計算薪資
     print("[4/4] 計算薪資 ...")
     results = []
     for config in configs:
         att = attendances.get(config.name)
         if not att:
-            print(f"  [略過] {config.name}：無出勤記錄")
-            continue
-        # 注入便當份數到 attendance
+            continue  # 非致命：前面 validate 已警告
         att.meal_count = meal_counts.get(config.name, 0)
         result = calculate_salary(config, att)
         result.print_detail()
