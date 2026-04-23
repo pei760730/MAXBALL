@@ -27,7 +27,8 @@
 
 ### 健保局查表 vs 公式（陳佩欣觸發）
 - 目前 `rules.py::health_insurance_formula` 承認公式值與查表可能差 ±1 元。
-- 若未來接入健保局查表資料，應：
-  1. 在 `salary_calculator` 把健保費抽成可替換 helper
-  2. 更新 `health_insurance_formula` 規則或新增 `health_insurance_table` 規則
+- Swap 點已備妥：`salary_calculator.health_insurance_fee(config)`；引擎與規則共用同一 helper。
+- 接入查表資料時：
+  1. 替換 `health_insurance_fee` 內部為查表實作（介面不變）
+  2. 若語義改為「以查表為準」，把 rules.py 裡的描述與 describe 更新
   3. 收掉 陳佩欣 的 tolerance=1

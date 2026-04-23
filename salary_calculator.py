@@ -18,8 +18,21 @@ from constants import (
 
 
 def _r(x: float) -> int:
-    # 台灣會計四捨五入 (ROUND_HALF_UP)，避免 Python 內建 _r() 的銀行家捨入。
+    # 台灣會計四捨五入 (ROUND_HALF_UP)，避免 Python 內建 round() 的銀行家捨入。
     return int(Decimal(str(x)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+
+def health_insurance_fee(config: "SalaryConfig") -> int:
+    """
+    員工自付健保費（公式法）= 投保薪資 × 5.17% × (1+眷屬) × 30%。
+
+    未來若要接健保局「保險費分擔表」查表，只需替換本函數實作；
+    rules.py::health_insurance_formula 會跟著走，不會漂移。
+    """
+    return _r(
+        config.health_insurance_base * HEALTH_INSURANCE_RATE
+        * (1 + config.health_dependents) * HEALTH_EMPLOYEE_SHARE
+    )
 
 
 # ──────────────────────────────────────────────
@@ -203,11 +216,8 @@ def calculate_salary(config: SalaryConfig, attendance: AttendanceRecord) -> Sala
     # ── 8. 勞保費 ──
     r.labor_insurance_fee = _r(config.labor_insurance_base * LABOR_INSURANCE_RATE)
 
-    # ── 9. 健保費 = 投保薪資 × 5.17% × (1+眷屬) × 30% ──
-    r.health_insurance_fee = _r(
-        config.health_insurance_base * HEALTH_INSURANCE_RATE
-        * (1 + config.health_dependents) * HEALTH_EMPLOYEE_SHARE
-    )
+    # ── 9. 健保費 ──
+    r.health_insurance_fee = health_insurance_fee(config)
 
     # ── 10. 退休金自提 ──
     #   特休視為出勤：effective = actual + annual_leave
