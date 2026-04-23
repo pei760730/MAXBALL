@@ -2,20 +2,12 @@ name: Read Google Sheets
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - claude/github-google-sheets-integration-O0Qww
-    paths:
-      - '.github/workflows/read_sheets.yml'
-      - 'trigger.txt'
 
 jobs:
   read-sheets:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: claude/github-google-sheets-integration-O0Qww
 
       - uses: actions/setup-python@v5
         with:
@@ -25,7 +17,9 @@ jobs:
         run: pip install gspread google-auth
 
       - name: Create service account file
-        run: echo '${{ secrets.GOOGLE_SERVICE_ACCOUNT }}' > service_account.json
+        env:
+          GOOGLE_SERVICE_ACCOUNT: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
+        run: printf '%s' "$GOOGLE_SERVICE_ACCOUNT" > service_account.json
 
       - name: Read all sheets and save
         run: |

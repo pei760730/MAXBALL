@@ -8,12 +8,18 @@ f(SalaryConfig, AttendanceRecord) → SalaryResult
 """
 
 from dataclasses import dataclass
+from decimal import Decimal, ROUND_HALF_UP
 from constants import (
     OVERTIME_RATE_FRONT, OVERTIME_RATE_BACK, OVERTIME_DIVISOR,
     LABOR_INSURANCE_RATE, HEALTH_INSURANCE_RATE, HEALTH_EMPLOYEE_SHARE,
     PENSION_SELF_RATE, WELFARE_RATE, WELFARE_CAP,
     FULL_ATTENDANCE_DEDUCT, MEAL_PRICE,
 )
+
+
+def _r(x: float) -> int:
+    # 台灣會計四捨五入 (ROUND_HALF_UP)，避免 Python 內建 _r() 的銀行家捨入。
+    return int(Decimal(str(x)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 # ──────────────────────────────────────────────
@@ -139,12 +145,12 @@ def calculate_salary(config: SalaryConfig, attendance: AttendanceRecord) -> Sala
     r = SalaryResult(name=config.name)
 
     # ── 1. 本薪 & 職務津貼 ÷ 30 × 月曆天數 ──
-    r.base_pay = round(config.base_salary / 30 * attendance.calendar_days)
-    r.duty_pay = round(config.duty_allowance / 30 * attendance.calendar_days)
+    r.base_pay = _r(config.base_salary / 30 * attendance.calendar_days)
+    r.duty_pay = _r(config.duty_allowance / 30 * attendance.calendar_days)
 
     # ── 2. 其他加給 = 固定 + 出勤天 × 每日加給 ──
     total_work_days = attendance.actual_work_days + attendance.holiday_overtime_days
-    r.other_pay = round(config.other_allowance + total_work_days * config.daily_work_allowance)
+    r.other_pay = _r(config.other_allowance + total_work_days * config.daily_work_allowance)
 
     # ── 3. 職務加給（按事假/病假/無薪假天數比例扣除，特休不扣）──
     non_annual_leave = (
@@ -153,10 +159,10 @@ def calculate_salary(config: SalaryConfig, attendance: AttendanceRecord) -> Sala
         + attendance.unpaid_leave_days
     )
     if non_annual_leave > 0 and attendance.work_days > 0:
-        deduct = round(config.position_allowance / attendance.work_days * non_annual_leave)
-        r.position_pay = round(config.position_allowance - deduct)
+        deduct = _r(config.position_allowance / attendance.work_days * non_annual_leave)
+        r.position_pay = _r(config.position_allowance - deduct)
     else:
-        r.position_pay = round(config.position_allowance)
+        r.position_pay = _r(config.position_allowance)
 
     # ── 4. 全勤獎金（每次事假/病假扣 300，特休不扣，最多扣至 0）──
     r.full_attendance_bonus = max(0, config.full_attendance_bonus - attendance.leave_instances * FULL_ATTENDANCE_DEDUCT)
@@ -170,18 +176,18 @@ def calculate_salary(config: SalaryConfig, attendance: AttendanceRecord) -> Sala
 
     # ── 5a. 假日加班費（週六/休息日，8小時: 前2hr×1.33 + 後6hr×1.66）──
     holiday_daily = hourly_base * (OVERTIME_RATE_FRONT * 2 + OVERTIME_RATE_BACK * 6)
-    r.holiday_overtime_pay = round(holiday_daily * attendance.holiday_overtime_days)
+    r.holiday_overtime_pay = _r(holiday_daily * attendance.holiday_overtime_days)
 
     # ── 5b. 延時加班費（平日）──
-    front_rate = round(hourly_base * OVERTIME_RATE_FRONT)
-    back_rate  = round(hourly_base * OVERTIME_RATE_BACK)
-    r.overtime_pay_1 = round(front_rate * attendance.overtime_hours_1)
-    r.overtime_pay_2 = round(back_rate  * attendance.overtime_hours_2)
+    front_rate = _r(hourly_base * OVERTIME_RATE_FRONT)
+    back_rate  = _r(hourly_base * OVERTIME_RATE_BACK)
+    r.overtime_pay_1 = _r(front_rate * attendance.overtime_hours_1)
+    r.overtime_pay_2 = _r(back_rate  * attendance.overtime_hours_2)
 
     # ── 7. 夜班津貼 & 伙食津貼（依實際上班天含六日）──
     total_work_days_all = attendance.actual_work_days + attendance.holiday_overtime_days + attendance.sunday_overtime_days
-    r.night_shift_pay = round(config.night_shift_daily * total_work_days_all)
-    r.meal_allowance_pay = round(config.meal_allowance_daily * total_work_days_all)
+    r.night_shift_pay = _r(config.night_shift_daily * total_work_days_all)
+    r.meal_allowance_pay = _r(config.meal_allowance_daily * total_work_days_all)
 
     # ── 8. 節金 ──
     r.festival_bonus = config.duty_allowance if attendance.has_festival_bonus else 0.0
@@ -195,10 +201,10 @@ def calculate_salary(config: SalaryConfig, attendance: AttendanceRecord) -> Sala
     )
 
     # ── 8. 勞保費 ──
-    r.labor_insurance_fee = round(config.labor_insurance_base * LABOR_INSURANCE_RATE)
+    r.labor_insurance_fee = _r(config.labor_insurance_base * LABOR_INSURANCE_RATE)
 
     # ── 9. 健保費 = 投保薪資 × 5.17% × (1+眷屬) × 30% ──
-    r.health_insurance_fee = round(
+    r.health_insurance_fee = _r(
         config.health_insurance_base * HEALTH_INSURANCE_RATE
         * (1 + config.health_dependents) * HEALTH_EMPLOYEE_SHARE
     )
@@ -209,12 +215,12 @@ def calculate_salary(config: SalaryConfig, attendance: AttendanceRecord) -> Sala
     effective_work = attendance.actual_work_days + attendance.annual_leave_days
     pension_ratio = 1.0 if effective_work >= attendance.work_days else effective_work / 30
     r.pension_self = (
-        round(config.pension_base * PENSION_SELF_RATE * pension_ratio)
+        _r(config.pension_base * PENSION_SELF_RATE * pension_ratio)
         if config.pension_self_contribute else 0.0
     )
 
     # ── 11. 福利金 ──
-    r.welfare_deduction = 0 if config.welfare_exempt else min(WELFARE_CAP, round(r.gross_income * WELFARE_RATE))
+    r.welfare_deduction = 0 if config.welfare_exempt else min(WELFARE_CAP, _r(r.gross_income * WELFARE_RATE))
 
     # ── 12. 便當費 ──
     if not config.meal_exempt and attendance.meal_count > 0:

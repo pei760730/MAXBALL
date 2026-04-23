@@ -1,24 +1,25 @@
 name: 同步 Google Sheets
 
+# 月度薪資結算：手動指定 year / month 後觸發。
+# 一次性 bootstrap（schema / employees / meal seed）已完成，腳本移到 _archive/，
+# 不再納入 CI，避免與現況漂移。
+
 on:
-  push:
-    branches:
-      - claude/salary-meal-system-S9Ubj
-    paths:
-      - trigger.txt   # 推送此檔案即可觸發
   workflow_dispatch:
     inputs:
-      action:
-        description: '執行動作'
+      year:
+        description: '年度（西元）'
         required: true
-        default: 'all'
-        type: choice
-        options:
-          - all          # 建立分頁 + 員工清單 + 便當資料（第一次完整執行）
-          - schema       # 只建立分頁結構
-          - employees    # 只寫入員工設定
-          - meal         # 只寫入便當訂購
-          - sync         # 計算薪資並寫回
+        type: string
+      month:
+        description: '月份（1-12）'
+        required: true
+        type: string
+      dry_run:
+        description: '僅試算不寫回 Sheets'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   sync:
@@ -26,28 +27,21 @@ jobs:
     steps:
       - name: 取得程式碼
         uses: actions/checkout@v4
-        with:
-          ref: claude/salary-meal-system-S9Ubj
 
       - name: 安裝 Python 套件
         run: pip install gspread google-auth
 
       - name: 還原 service_account.json
-        run: |
-          echo '${{ secrets.GOOGLE_SERVICE_ACCOUNT }}' > service_account.json
+        env:
+          GOOGLE_SERVICE_ACCOUNT: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
+        run: printf '%s' "$GOOGLE_SERVICE_ACCOUNT" > service_account.json
 
-      - name: 建立分頁結構
-        if: ${{ github.event_name == 'push' || inputs.action == 'all' || inputs.action == 'schema' }}
-        run: python sheets_schema.py
-
-      - name: 寫入員工設定
-        if: ${{ github.event_name == 'push' || inputs.action == 'all' || inputs.action == 'employees' }}
-        run: python seed_employees.py
-
-      - name: 寫入 2026/3 便當訂購資料
-        if: ${{ github.event_name == 'push' || inputs.action == 'all' || inputs.action == 'meal' }}
-        run: python seed_meal_march2026.py
+      - name: 回歸測試（計算引擎 + 沉澱規則）
+        run: python verified_cases.py
 
       - name: 計算薪資並寫回
-        if: ${{ inputs.action == 'sync' }}
-        run: python main_sync.py --year 2026 --month 3
+        run: |
+          python main_sync.py \
+            --year "${{ inputs.year }}" \
+            --month "${{ inputs.month }}" \
+            ${{ inputs.dry_run == true && '--dry-run' || '' }}
