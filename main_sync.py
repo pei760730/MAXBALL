@@ -22,6 +22,9 @@ import datetime
 from sheets_client import connect, read_all, write_rows
 from salary_calculator import SalaryConfig, AttendanceRecord, calculate_salary, SalaryResult
 from employee_configs import EMPLOYEE_CONFIGS
+from boundary import (
+    ATTENDANCE_HEADER_KEYWORDS, validate_header, validate_attendance, is_fatal,
+)
 
 # ──────────────────────────────────────────────────────────────
 # Google Sheets 設定
@@ -32,35 +35,6 @@ CREDENTIALS_FILE = "service_account.json"
 TAB_ATTENDANCE = "月出勤"
 TAB_MEAL       = "便當訂購"
 TAB_SALARY_OUT = "薪資結算"
-
-
-# ──────────────────────────────────────────────────────────────
-# Header 驗證（schema drift → fail loud，不再 silently 0 賠錢）
-# ──────────────────────────────────────────────────────────────
-ATTENDANCE_HEADER_KEYWORDS = [
-    "姓名", "曆日", "工作日", "實際出勤", "假日加班", "週日加班",
-    "1.33", "1.66", "事假", "病假", "無薪", "特休", "全勤", "節金",
-]
-
-
-def _col_letter(idx: int) -> str:
-    # 0→A, 1→B, ..., 25→Z, 26→AA 略
-    return chr(ord("A") + idx) if idx < 26 else f"col{idx+1}"
-
-
-def _validate_header(header_row, expected_keywords, sheet_name):
-    """每個預期關鍵字必須以 substring 形式出現在對應欄的 header；否則 raise。"""
-    if len(header_row) < len(expected_keywords):
-        raise ValueError(
-            f"{sheet_name}: header 僅 {len(header_row)} 欄，預期 ≥ {len(expected_keywords)} 欄"
-        )
-    for i, kw in enumerate(expected_keywords):
-        cell = (header_row[i] or "").strip()
-        if kw not in cell:
-            raise ValueError(
-                f"{sheet_name}: 第 {i+1} 欄 ({_col_letter(i)}) 預期含 '{kw}'，實際為 '{cell}'；"
-                f"若 Sheet 欄位順序已變動，請同步更新 {sheet_name} 的讀取邏輯。"
-            )
 
 
 def load_attendance(ws, year: int, month: int) -> dict[str, AttendanceRecord]:
@@ -78,7 +52,7 @@ def load_attendance(ws, year: int, month: int) -> dict[str, AttendanceRecord]:
     rows = read_all(ws)
     if not rows:
         raise ValueError("月出勤: 空白工作表")
-    _validate_header(rows[0], ATTENDANCE_HEADER_KEYWORDS, "月出勤")
+    validate_header(rows[0], ATTENDANCE_HEADER_KEYWORDS, "月出勤")
     records = {}
     for row in rows[1:]:
         if not row or not row[0].strip():
@@ -124,40 +98,6 @@ def load_meal_counts(ws) -> dict[str, int]:
                 count += 1
         counts[name] = count
     return counts
-
-
-# ──────────────────────────────────────────────────────────────
-# 出勤資料校驗（姓名比對 + 值域檢查；[錯誤] 開頭即中止）
-# ──────────────────────────────────────────────────────────────
-def validate_attendance(configs: list[SalaryConfig],
-                        attendances: dict[str, AttendanceRecord]) -> list[str]:
-    """回傳訊息列表；含 `[錯誤]` 前綴者視為致命，由 run() 判斷是否中止。"""
-    messages: list[str] = []
-    config_names = {c.name for c in configs}
-    att_names = set(attendances.keys())
-
-    # 姓名比對：configs 多出 → 有人漏填出勤；attendance 多出 → 姓名打錯或該人不在 config
-    missing_att = config_names - att_names
-    extra_att = att_names - config_names
-    if missing_att:
-        messages.append(f"[警告] 員工無出勤記錄：{', '.join(sorted(missing_att))}")
-    if extra_att:
-        messages.append(f"[錯誤] 出勤表有不明姓名（typo 或未登錄員工）：{', '.join(sorted(extra_att))}")
-
-    # 值域檢查
-    for name, att in attendances.items():
-        if not (28 <= att.calendar_days <= 31):
-            messages.append(f"[錯誤] {name} 曆日={att.calendar_days}（應 28-31）")
-        if not (0 <= att.work_days <= att.calendar_days):
-            messages.append(f"[錯誤] {name} 工作日={att.work_days}（應 ≤ 曆日 {att.calendar_days}）")
-        if att.actual_work_days < 0 or att.actual_work_days > att.work_days:
-            messages.append(f"[警告] {name} 實際出勤={att.actual_work_days}（工作日={att.work_days}）")
-        if att.overtime_hours_1 < 0 or att.overtime_hours_2 < 0:
-            messages.append(f"[錯誤] {name} 加班時數為負數")
-        if att.holiday_overtime_days < 0 or att.sunday_overtime_days < 0:
-            messages.append(f"[錯誤] {name} 假日/週日加班日為負數")
-
-    return messages
 
 
 # ──────────────────────────────────────────────────────────────
@@ -239,7 +179,7 @@ def run(year: int, month: int, dry_run: bool = False):
     msgs = validate_attendance(configs, attendances)
     for m in msgs:
         print(f"  {m}")
-    if any(m.startswith("[錯誤]") for m in msgs):
+    if is_fatal(msgs):
         print("\n  出勤資料有致命錯誤，中止計算。請修正 Sheet 後重試。")
         return []
 

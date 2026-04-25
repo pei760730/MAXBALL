@@ -1,8 +1,10 @@
 """
-Google Sheets 分頁結構初始化
-============================
-第一次使用時執行此程式，會自動在你的 Google Sheet 建立 4 個分頁，
-並填入正確的欄位表頭，讓你直接開始輸入資料。
+Google Sheets 分頁結構初始化（一次性 bootstrap）
+=============================================
+建立 3 個分頁與表頭：月出勤、便當訂購、薪資結算。
+
+員工設定 *不再* 寫進 Sheet：employee_configs.py 是唯一權威源。
+詳見 README「設計原則」。
 
 執行方式：
   python sheets_schema.py
@@ -14,39 +16,10 @@ from main_sync import SHEET_URL, CREDENTIALS_FILE
 from sheets_client import connect, write_rows
 
 # ──────────────────────────────────────────────────────────────
-# 各分頁的欄位表頭定義（與 main_sync.py 讀取邏輯完全對應）
+# 各分頁的欄位表頭定義（與 boundary.ATTENDANCE_HEADER_KEYWORDS 對應）
 # ──────────────────────────────────────────────────────────────
 
-# 分頁 1：員工設定（薪資核定，17 欄 A-Q）
-#   對應 main_sync.load_employee_configs() 的讀取順序
-EMPLOYEE_HEADER = [[
-    "員工編號",           # A
-    "姓名",               # B
-    "本薪(月)",           # C
-    "職務津貼(月)",       # D
-    "其他加給(固定)",     # E
-    "職務加給(月)",       # F
-    "全勤獎金",           # G
-    "出勤加給/天",        # H  daily_work_allowance
-    "夜班津貼/天",        # I  night_shift_daily
-    "伙食津貼/天",        # J  meal_allowance_daily
-    "勞保投保薪資",       # K
-    "健保投保薪資",       # L
-    "健保眷屬數",         # M
-    "退休金投保薪資",     # N
-    "自提退休金(Y/N)",    # O
-    "不扣便當(Y/N)",      # P  meal_exempt
-    "不扣福利金(Y/N)",    # Q  welfare_exempt
-]]
-
-EMPLOYEE_EXAMPLE = [
-    ["005", "王靖銘", 16350, 7950, 2850, 17850, 1600, 235, 0, 0,
-     45800, 45800, 0, 45800, "N", "N", "N"],
-    ["011", "鄧志展", 16350, 7950, 2850, 17850, 1600, 260, 0, 0,
-     45800, 60800, 0, 60800, "Y", "Y", "N"],
-]
-
-# 分頁 2：出勤記錄（每月填寫，14 欄 A-N）
+# 分頁 1：出勤記錄（每月填寫，14 欄 A-N）
 #   對應 main_sync.load_attendance() 的讀取順序
 ATTENDANCE_HEADER = [[
     "姓名",               # A
@@ -70,7 +43,7 @@ ATTENDANCE_EXAMPLE = [
     ["鄧志展", 31, 22, 22.0, 4.0, 0, 50, 60, 0, 0, 0, 0, 0, "N"],
 ]
 
-# 分頁 3：便當訂購（每月填寫，欄位 B 起為每天）
+# 分頁 2：便當訂購（每月填寫，欄位 B 起為每天）
 MEAL_HEADER = [
     ["姓名"] + [str(d) for d in range(1, 32)] + ["合計"]
 ]
@@ -86,7 +59,7 @@ MEAL_NOTE = [[
     "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""
 ]]
 
-# 分頁 4：薪資結算（程式自動寫入，22 欄）
+# 分頁 3：薪資結算（程式自動寫入，22 欄）
 #   對應 main_sync.write_salary_results() 的輸出順序
 SALARY_HEADER = [[
     "年度", "月份", "姓名",
@@ -126,12 +99,6 @@ def setup_all_tabs(with_examples: bool = True):
 
     print("建立分頁結構 ...")
 
-    # 員工設定（17 欄）
-    ws_emp = _get_or_create_tab(spreadsheet, "員工設定")
-    ws_emp.clear()
-    data = EMPLOYEE_HEADER + (EMPLOYEE_EXAMPLE if with_examples else [])
-    write_rows(ws_emp, data, start_row=1)
-
     # 月出勤（14 欄）
     ws_att = _get_or_create_tab(spreadsheet, "月出勤")
     ws_att.clear()
@@ -150,12 +117,12 @@ def setup_all_tabs(with_examples: bool = True):
     write_rows(ws_sal, SALARY_HEADER, start_row=1)
 
     print("\n完成！分頁結構：")
-    print("  員工設定  → 17 欄（A-Q），固定薪資核定資料")
     print("  月出勤    → 14 欄（A-N），每月出勤/加班/請假")
     print("  便當訂購  → 每天打勾（V/素/X）")
     print("  薪資結算  → 22 欄，程式自動計算寫入")
     if with_examples:
-        print("\n  ※ 已填入範例資料，確認格式後請替換為真實員工資料")
+        print("\n  ※ 已填入範例資料，確認格式後請替換為真實出勤資料")
+    print("\n※ 員工設定 由 employee_configs.py 維護（單一權威源），不在 Sheet 上。")
 
 
 if __name__ == "__main__":
