@@ -2,7 +2,7 @@
 
 19 位員工的月薪資計算與 Google Sheets 整合。
 **員工設定由 Python 維護**（版本控管、單一權威源），**出勤 / 便當 / 結算** 走 Google Sheets。
-核心是純函數引擎 + 11 條可執行規則不變式，所有改動由 17 個真實薪資截圖回歸測試守門。
+核心是純函數引擎 + 17 條可執行規則不變式 + coverage matrix，所有改動由 17 個真實薪資截圖回歸測試守門。
 
 ---
 
@@ -20,9 +20,9 @@ employee_configs.py  ──►  salary_calculator ──► SalaryResult
 ```
 
 - **引擎** (`salary_calculator.calculate_salary`)：純函數，`_r()` 以 `ROUND_HALF_UP` 替代 Python 銀行家捨入
-- **規則不變式** (`rules.py`)：11 條，每條 = predicate + 首次驗證案例名單；engine 若偏離語義，CI 擋
-- **回歸案例** (`verified_cases.py`)：17 個真實薪資截圖驗證；同時跑不變式雙層守門
-- **boundary 驗證**：Sheet header 漂移 → `raise ValueError`；出勤姓名打錯 / 值域異常 → 中止計算
+- **規則不變式** (`rules.py`)：17 條，分 SEMANTIC（語義獨立斷言）+ STRUCTURAL（組成契約），每條 = applies + check + 驗證案例名單
+- **回歸案例** (`verified_cases.py`)：17 個真實薪資截圖 + coverage matrix（規則觸發次數 / 零觸發提示 / 無公式守護的欄位）
+- **邊界層** (`boundary.py`)：header 漂移 → `raise ValueError`；姓名 typo / 值域異常 → 訊息列；獨立可測，不依賴 Google Sheets
 
 ---
 
@@ -67,15 +67,14 @@ CI 上用 `.github/workflows/sync_sheets.yml` 的 workflow_dispatch 觸發，手
 MAXBALL/
 ├── constants.py           # 費率 / 倍率 / 上限（唯一定義處，封版）
 ├── salary_calculator.py   # 純函數引擎 + _r() + health_insurance_fee helper
-├── rules.py               # 11 條可執行規則不變式
+├── rules.py               # 17 條規則（SEMANTIC × 7 + STRUCTURAL × 10），每條含 applies/check
 ├── employee_configs.py    # 員工 SalaryConfig（Python 單一權威源）
-├── verified_cases.py      # 17 個回歸案例 + 執行 rules 不變式
+├── verified_cases.py      # 17 個回歸案例（Case 結構 + tolerance_reason）+ coverage matrix
+├── boundary.py            # 邊界驗證（header / 姓名 / 值域），自帶 self-test
 ├── main_sync.py           # 月出勤/便當 讀取 → 計算 → 寫回薪資結算
-│                          #   含 header 驗證 + validate_attendance
-├── sheets_schema.py       # Sheet 分頁 bootstrap（一次性）
+├── sheets_schema.py       # Sheet 分頁 bootstrap（一次性，不含員工設定）
 ├── sheets_client.py       # gspread 薄封裝
-├── ISSUES.md              # 未驗證個案 + 候選規則（待觸發才升級）
-├── _archive/              # 舊 seed/debug 腳本（不在 CI）
+├── ISSUES.md              # narrative：未驗證個案 + 候選規則（結構化訊號改由 coverage matrix 印）
 └── .github/workflows/
     ├── sync_sheets.yml    # 月結算（workflow_dispatch + year/month/dry_run）
     └── read_sheets.yml    # 拉 Sheets snapshot（workflow_dispatch）
@@ -89,10 +88,13 @@ MAXBALL/
 |---|---|
 | 單一權威源 | Employee configs 只在 `employee_configs.py`；Sheet 不再有「員工設定」tab |
 | 鐵律常數只寫一次 | 所有費率在 `constants.py`，其他模組 import |
-| 規則沉澱可執行 | `rules.py` 11 條 predicate，engine 變更會被雙層檢查（案例金額 + 語義契約） |
+| 規則沉澱可執行，且區分種類 | `rules.py` 分 SEMANTIC（獨立斷言）/ STRUCTURAL（組成契約）；每條 = applies + check + verified_by |
+| 規則層自我健身 | `coverage matrix` 每次回歸印觸發次數；零觸發即死規則或漏 case |
+| Tolerance 必須歸因 | 任何 `tolerance > 0` 必對得回 `TOLERANCE_REASONS` 的 swap 點；接表後自動失敗提醒收掉 |
 | 捨入策略明確 | `_r()` 使用 `ROUND_HALF_UP`（台灣會計慣例），非 Python 內建銀行家 |
 | 健保查表 swap 點 | `salary_calculator.health_insurance_fee(config)`；未來接健保局表只改此函數 |
-| Boundary 驗證 | Sheet header 漂移 → raise；姓名 typo / 值域異常 → 中止，不 silently 賠錢 |
+| Boundary 獨立可測 | `boundary.py` 自帶 self-test，不依賴 Google Sheets |
+| 邊界 fail loud | Sheet header 漂移 → raise；姓名 typo / 值域異常 → 中止，不 silently 賠錢 |
 | CI 契約收斂 | `workflow_dispatch` + year/month/dry_run，不再 poke-file 觸發 |
 
 ---
@@ -101,14 +103,16 @@ MAXBALL/
 
 **17/17 通過**（2026 年 3 月）
 - 16 筆 exact
-- 1 筆 tolerance=1：陳佩欣 #31（健保公式 vs 健保局查表真實差異，非捨入；swap 點已備好待查表接入）
+- 1 筆 tolerance=1：陳佩欣 #16（歸因 `health_insurance_table_lookup`；swap 點：`salary_calculator.health_insurance_fee`）
 
-**11 條規則不變式 0 破損**：
-`base_duty_formula` / `annual_leave_no_deduct` / `pension_annual_leave_full` / `pension_off` /
-`overtime_base_240` / `meal_exempt` / `daily_work_allowance` / `holiday_ot_rounding` /
-`health_insurance_formula` / `welfare_cap_and_exempt` / `sums_consistent`
+**17 條規則 0 破損**
+- SEMANTIC（7）：`annual_leave_no_deduct` / `pension_off` / `pension_annual_leave_full` / `pension_partial_ratio` / `position_proration` / `meal_exempt` / `welfare_cap_and_exempt`
+- STRUCTURAL（10）：`base_duty_formula` / `overtime_base_240` / `holiday_ot_rounding` / `daily_work_allowance` / `health_insurance_formula` / `labor_insurance_formula` / `night_shift_compose` / `meal_allowance_compose` / `festival_compose` / `sums_consistent`
 
-未驗證個案：陳麥斯 #8、簡宜君 #17（見 `ISSUES.md`，需實際薪資截圖）
+**Coverage matrix 提示**（`python verified_cases.py` 自動印）：
+零觸發規則：`pension_partial_ratio` / `position_proration` / `festival_compose` — 對應引擎分支但無 case 證明；前兩條等簡宜君 #17 截圖補齊即可觸發，festival 等有節金月份。
+
+未驗證個案：陳麥斯 #8、簡宜君 #17（見 `ISSUES.md`）
 
 ---
 

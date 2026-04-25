@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
 from constants import (
     OVERTIME_RATE_FRONT, OVERTIME_RATE_BACK, OVERTIME_DIVISOR,
+    HOLIDAY_OT_FRONT_HOURS, HOLIDAY_OT_BACK_HOURS,
     LABOR_INSURANCE_RATE, HEALTH_INSURANCE_RATE, HEALTH_EMPLOYEE_SHARE,
     PENSION_SELF_RATE, WELFARE_RATE, WELFARE_CAP,
     FULL_ATTENDANCE_DEDUCT, MEAL_PRICE,
@@ -187,8 +188,11 @@ def calculate_salary(config: SalaryConfig, attendance: AttendanceRecord) -> Sala
     )
     hourly_base = overtime_base / OVERTIME_DIVISOR
 
-    # ── 5a. 假日加班費（週六/休息日，8小時: 前2hr×1.33 + 後6hr×1.66）──
-    holiday_daily = hourly_base * (OVERTIME_RATE_FRONT * 2 + OVERTIME_RATE_BACK * 6)
+    # ── 5a. 假日加班費（週六/休息日，8小時: 前 HOLIDAY_OT_FRONT_HOURS×1.33 + 後 HOLIDAY_OT_BACK_HOURS×1.66）──
+    holiday_daily = hourly_base * (
+        OVERTIME_RATE_FRONT * HOLIDAY_OT_FRONT_HOURS
+        + OVERTIME_RATE_BACK * HOLIDAY_OT_BACK_HOURS
+    )
     r.holiday_overtime_pay = _r(holiday_daily * attendance.holiday_overtime_days)
 
     # ── 5b. 延時加班費（平日）──
