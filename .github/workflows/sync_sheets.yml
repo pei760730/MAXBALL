@@ -1,8 +1,8 @@
 name: 同步 Google Sheets
 
 # 月度薪資結算：手動指定 year / month 後觸發。
-# 一次性 bootstrap（schema / employees / meal seed）已完成，腳本移到 _archive/，
-# 不再納入 CI，避免與現況漂移。
+# 一次性 bootstrap（schema / employees / meal seed）已完成；
+# CI 只跑：回歸測試 → 寫回 Sheets。
 
 on:
   workflow_dispatch:

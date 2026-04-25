@@ -5,7 +5,7 @@
 > 這裡只放需要人類 narrative 的個案與決策紀錄。
 
 ## 驗證狀態
-17/17 通過（2026 年 3 月）；14 條規則 0 破損。
+17/17 通過（2026 年 3 月）；17 條規則 0 破損。
 - 16 筆 exact 對齊
 - 1 筆 tolerance=1：**陳佩欣 #16**，已歸因到 `health_insurance_table_lookup`
   - swap 點：`salary_calculator.health_insurance_fee`
@@ -25,7 +25,8 @@
   - 簡宜君：借支 10,000
   - 待決定：要進引擎成為新欄位，還是視為「會計帳上事項，不在薪資計算內」。
 
-## 規則層待補（由 coverage matrix 提示）
-- `festival_compose`：零 case 觸發（當月無人領節金）。**不刪**，留給有節金月份。
-- `labor_insurance_fee`：目前無專屬公式規則，僅受 `sums_consistent` 兜底。
-  - 若新增「投保薪資 × 2.5%」斷言為獨立 rule 屬於低成本補強。下次動規則層時順手做。
+## 規則層零觸發（由 coverage matrix 提示）
+規則已寫好對應引擎分支，但目前 17 個 case 都不觸發。**不刪**，等對應 case 出現自動接管：
+- `festival_compose`：留給有節金月份。
+- `pension_partial_ratio`：簡宜君 #17 補資料後（有事假且 pension 自提者）會觸發。
+- `position_proration`：簡宜君 #17 補資料後（有事/病/無薪假者）會觸發。

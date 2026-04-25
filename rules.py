@@ -33,7 +33,7 @@ from salary_calculator import (
 from constants import (
     OVERTIME_DIVISOR, OVERTIME_RATE_FRONT, OVERTIME_RATE_BACK,
     HOLIDAY_OT_FRONT_HOURS, HOLIDAY_OT_BACK_HOURS,
-    PENSION_SELF_RATE, WELFARE_RATE, WELFARE_CAP,
+    LABOR_INSURANCE_RATE, PENSION_SELF_RATE, WELFARE_RATE, WELFARE_CAP,
 )
 
 
@@ -110,6 +110,19 @@ def _pension_annual_leave_full(c, a, r):
     exp = _r(c.pension_base * PENSION_SELF_RATE)
     return _ok(r.pension_self == exp,
                f"pension with annual leave should be full ratio: got {r.pension_self}, exp {exp}")
+
+
+def _position_proration_applies(c, a, r):
+    non_annual = a.personal_leave_days + a.sick_leave_days + a.unpaid_leave_days
+    return non_annual > 0 and a.work_days > 0
+
+
+def _position_proration(c, a, r):
+    non_annual = a.personal_leave_days + a.sick_leave_days + a.unpaid_leave_days
+    deduct = _r(c.position_allowance / a.work_days * non_annual)
+    exp = _r(c.position_allowance - deduct)
+    return _ok(r.position_pay == exp,
+               f"position_pay proration broken: got {r.position_pay}, exp {exp}")
 
 
 def _meal_exempt_applies(c, a, r):
@@ -195,6 +208,27 @@ def _health_insurance_formula(c, a, r):
                f"health insurance broken: got {r.health_insurance_fee}, exp {exp}")
 
 
+def _labor_insurance_formula(c, a, r):
+    # 勞保 = 投保薪資 × 2.5%。免繳者 labor_insurance_base=0 → fee=0。
+    exp = _r(c.labor_insurance_base * LABOR_INSURANCE_RATE)
+    return _ok(r.labor_insurance_fee == exp,
+               f"labor insurance broken: got {r.labor_insurance_fee}, exp {exp}")
+
+
+def _pension_partial_applies(c, a, r):
+    if not c.pension_self_contribute:
+        return False
+    effective = a.actual_work_days + a.annual_leave_days
+    return effective < a.work_days
+
+
+def _pension_partial_ratio(c, a, r):
+    effective = a.actual_work_days + a.annual_leave_days
+    exp = _r(c.pension_base * PENSION_SELF_RATE * (effective / 30))
+    return _ok(r.pension_self == exp,
+               f"pension partial ratio broken: got {r.pension_self}, exp {exp}")
+
+
 def _night_shift_applies(c, a, r):
     return c.night_shift_daily > 0
 
@@ -264,6 +298,14 @@ RULES: List[Rule] = [
          "退休金自提：特休視為出勤，effective_days≥work_days → ratio=1.0",
          _pension_full_applies, _pension_annual_leave_full,
          ["許清輝#10"]),
+    Rule("pension_partial_ratio", "semantic",
+         "退休金自提：effective_days<work_days → ratio=effective/30",
+         _pension_partial_applies, _pension_partial_ratio,
+         []),  # 尚無 case；若新增有事/病/無薪假的 pension 自提者會自動觸發
+    Rule("position_proration", "semantic",
+         "事假/病假/無薪假按 work_days 比例扣職務加給（特休不扣）",
+         _position_proration_applies, _position_proration,
+         []),  # 尚無 case；簡宜君 #17 補資料後會觸發
     Rule("meal_exempt", "semantic",
          "meal_exempt=True 永不扣便當費，無論 meal_count 多少",
          _meal_exempt_applies, _meal_exempt,
@@ -294,6 +336,10 @@ RULES: List[Rule] = [
          "健保費 = 投保薪資 × 5.17% × (1+眷屬) × 30%（查表可能差 ±1 元）",
          _always, _health_insurance_formula,
          ["鄧志展#11", "許清輝#10"]),
+    Rule("labor_insurance_formula", "structural",
+         "勞保費 = 投保薪資 × 2.5%；免繳者 base=0 → fee=0",
+         _always, _labor_insurance_formula,
+         ["王靖銘#5", "莊明燦#19"]),
     Rule("night_shift_compose", "structural",
          "夜班津貼 = night_shift_daily × (actual + holiday_ot + sunday_ot)",
          _night_shift_applies, _night_shift_compose,

@@ -61,7 +61,7 @@ FIELD_FORMULA_RULES = {
     "base_pay":               ["base_duty_formula"],
     "duty_pay":               ["base_duty_formula"],
     "other_pay":              ["daily_work_allowance"],
-    "position_pay":           ["annual_leave_no_deduct"],          # 條件覆蓋
+    "position_pay":           ["annual_leave_no_deduct", "position_proration"],
     "full_attendance_bonus":  ["annual_leave_no_deduct"],          # 條件覆蓋
     "holiday_overtime_pay":   ["holiday_ot_rounding"],
     "overtime_pay_1":         ["overtime_base_240"],
@@ -69,9 +69,9 @@ FIELD_FORMULA_RULES = {
     "night_shift_pay":        ["night_shift_compose"],
     "meal_allowance_pay":     ["meal_allowance_compose"],
     "festival_bonus":         ["festival_compose"],
-    "labor_insurance_fee":    [],   # ⚠ 無公式規則 — 僅 sums_consistent
+    "labor_insurance_fee":    ["labor_insurance_formula"],
     "health_insurance_fee":   ["health_insurance_formula"],
-    "pension_self":           ["pension_off", "pension_annual_leave_full"],  # 條件覆蓋
+    "pension_self":           ["pension_off", "pension_annual_leave_full", "pension_partial_ratio"],
     "welfare_deduction":      ["welfare_cap_and_exempt"],
     "meal_deduction":         ["meal_exempt"],                     # 條件覆蓋
     "gross_income":           ["sums_consistent"],

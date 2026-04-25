@@ -2,7 +2,7 @@
 
 19 位員工的月薪資計算與 Google Sheets 整合。
 **員工設定由 Python 維護**（版本控管、單一權威源），**出勤 / 便當 / 結算** 走 Google Sheets。
-核心是純函數引擎 + 14 條可執行規則不變式 + coverage matrix，所有改動由 17 個真實薪資截圖回歸測試守門。
+核心是純函數引擎 + 17 條可執行規則不變式 + coverage matrix，所有改動由 17 個真實薪資截圖回歸測試守門。
 
 ---
 
@@ -20,7 +20,7 @@ employee_configs.py  ──►  salary_calculator ──► SalaryResult
 ```
 
 - **引擎** (`salary_calculator.calculate_salary`)：純函數，`_r()` 以 `ROUND_HALF_UP` 替代 Python 銀行家捨入
-- **規則不變式** (`rules.py`)：14 條，分 SEMANTIC（語義獨立斷言）+ STRUCTURAL（組成契約），每條 = applies + check + 驗證案例名單
+- **規則不變式** (`rules.py`)：17 條，分 SEMANTIC（語義獨立斷言）+ STRUCTURAL（組成契約），每條 = applies + check + 驗證案例名單
 - **回歸案例** (`verified_cases.py`)：17 個真實薪資截圖 + coverage matrix（規則觸發次數 / 零觸發提示 / 無公式守護的欄位）
 - **邊界層** (`boundary.py`)：header 漂移 → `raise ValueError`；姓名 typo / 值域異常 → 訊息列；獨立可測，不依賴 Google Sheets
 
@@ -67,7 +67,7 @@ CI 上用 `.github/workflows/sync_sheets.yml` 的 workflow_dispatch 觸發，手
 MAXBALL/
 ├── constants.py           # 費率 / 倍率 / 上限（唯一定義處，封版）
 ├── salary_calculator.py   # 純函數引擎 + _r() + health_insurance_fee helper
-├── rules.py               # 14 條規則（SEMANTIC × 5 + STRUCTURAL × 9），每條含 applies/check
+├── rules.py               # 17 條規則（SEMANTIC × 7 + STRUCTURAL × 10），每條含 applies/check
 ├── employee_configs.py    # 員工 SalaryConfig（Python 單一權威源）
 ├── verified_cases.py      # 17 個回歸案例（Case 結構 + tolerance_reason）+ coverage matrix
 ├── boundary.py            # 邊界驗證（header / 姓名 / 值域），自帶 self-test
@@ -75,7 +75,6 @@ MAXBALL/
 ├── sheets_schema.py       # Sheet 分頁 bootstrap（一次性，不含員工設定）
 ├── sheets_client.py       # gspread 薄封裝
 ├── ISSUES.md              # narrative：未驗證個案 + 候選規則（結構化訊號改由 coverage matrix 印）
-├── _archive/              # 舊 seed/debug 腳本（不在 CI）
 └── .github/workflows/
     ├── sync_sheets.yml    # 月結算（workflow_dispatch + year/month/dry_run）
     └── read_sheets.yml    # 拉 Sheets snapshot（workflow_dispatch）
@@ -106,13 +105,12 @@ MAXBALL/
 - 16 筆 exact
 - 1 筆 tolerance=1：陳佩欣 #16（歸因 `health_insurance_table_lookup`；swap 點：`salary_calculator.health_insurance_fee`）
 
-**14 條規則 0 破損**
-- SEMANTIC：`annual_leave_no_deduct` / `pension_off` / `pension_annual_leave_full` / `meal_exempt` / `welfare_cap_and_exempt`
-- STRUCTURAL：`base_duty_formula` / `overtime_base_240` / `holiday_ot_rounding` / `daily_work_allowance` / `health_insurance_formula` / `night_shift_compose` / `meal_allowance_compose` / `festival_compose` / `sums_consistent`
+**17 條規則 0 破損**
+- SEMANTIC（7）：`annual_leave_no_deduct` / `pension_off` / `pension_annual_leave_full` / `pension_partial_ratio` / `position_proration` / `meal_exempt` / `welfare_cap_and_exempt`
+- STRUCTURAL（10）：`base_duty_formula` / `overtime_base_240` / `holiday_ot_rounding` / `daily_work_allowance` / `health_insurance_formula` / `labor_insurance_formula` / `night_shift_compose` / `meal_allowance_compose` / `festival_compose` / `sums_consistent`
 
 **Coverage matrix 提示**（`python verified_cases.py` 自動印）：
-- `festival_compose` 零觸發 — 當月無人領節金，留待後續月份覆蓋。
-- `labor_insurance_fee` 無公式規則 — 僅受 `sums_consistent` 兜底，下次動規則層時補。
+零觸發規則：`pension_partial_ratio` / `position_proration` / `festival_compose` — 對應引擎分支但無 case 證明；前兩條等簡宜君 #17 截圖補齊即可觸發，festival 等有節金月份。
 
 未驗證個案：陳麥斯 #8、簡宜君 #17（見 `ISSUES.md`）
 
