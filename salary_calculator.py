@@ -201,12 +201,12 @@ def calculate_salary(config: SalaryConfig, attendance: AttendanceRecord) -> Sala
     r.overtime_pay_1 = _r(front_rate * attendance.overtime_hours_1)
     r.overtime_pay_2 = _r(back_rate  * attendance.overtime_hours_2)
 
-    # ── 7. 夜班津貼 & 伙食津貼（依實際上班天含六日）──
+    # ── 6. 夜班津貼 & 伙食津貼（依實際上班天含六日）──
     total_work_days_all = attendance.actual_work_days + attendance.holiday_overtime_days + attendance.sunday_overtime_days
     r.night_shift_pay = _r(config.night_shift_daily * total_work_days_all)
     r.meal_allowance_pay = _r(config.meal_allowance_daily * total_work_days_all)
 
-    # ── 8. 節金 ──
+    # ── 7. 節金 ──
     r.festival_bonus = config.duty_allowance if attendance.has_festival_bonus else 0.0
 
     # ── 應領合計 ──
