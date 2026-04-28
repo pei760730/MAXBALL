@@ -49,8 +49,11 @@ class Case:
 
 # ──────────────────────────────────────────────────────────────
 # 結果欄位 → 守護它的「公式規則」對照
-#   只列 *專屬公式規則*；sums_consistent 是兜底約束，這裡不算。
-#   無專屬規則的欄位由 coverage matrix 自動提示。
+#   個別收入/扣除欄位列出 *專屬公式規則*（不列 sums_consistent，否則所有欄位都會被它兜底，
+#   失去「找出無公式守護欄位」的訊號）。
+#   gross_income / total_deduction / net_salary 三個合計欄位的公式 *本身就是* sums_consistent，
+#   所以該規則就是它們的專屬公式，列出來。
+#   未列任何規則（[]）的欄位 → coverage matrix 末段自動標記為「無公式規則守護」。
 # ──────────────────────────────────────────────────────────────
 FIELD_FORMULA_RULES = {
     "base_pay":               ["base_duty_formula"],

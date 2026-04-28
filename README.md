@@ -47,7 +47,7 @@ employee_configs.py  ──►  salary_calculator ──► SalaryResult
 ```bash
 pip install -r requirements.txt
 
-# 回歸測試（17 案例 + 11 條規則不變式）—— 先跑這個
+# 回歸測試（17 案例 + 17 條規則不變式）—— 先跑這個
 python verified_cases.py
 
 # 實際結算某月（讀 Sheets → 算薪資 → 寫回 Sheets）
