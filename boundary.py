@@ -114,7 +114,7 @@ def is_fatal(messages: list[str]) -> bool:
 # ──────────────────────────────────────────────────────────────
 # Self-test（不需要 Google Sheets）
 # ──────────────────────────────────────────────────────────────
-def _selftest():
+def selftest():
     # ── header 漂移：欄位數不足 ──
     try:
         validate_header(["姓名"], ATTENDANCE_HEADER_KEYWORDS, "月出勤")
@@ -189,4 +189,4 @@ def _selftest():
 
 
 if __name__ == "__main__":
-    _selftest()
+    selftest()

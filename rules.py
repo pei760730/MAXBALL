@@ -2,26 +2,35 @@
 薪資計算不變式（executable invariants）
 ====================================
 每條規則 = 對 (SalaryConfig, AttendanceRecord, SalaryResult) 的可執行斷言
-           + 一個 `applies` 前置條件 + 首次驗證它的 case 名單。
+           + 一個 `applies` 前置條件。
 
-verified_cases 在每個 case 跑完 calculate_salary 後逐條檢查；
-規則破損 = engine 偏離已沉澱語義 → CI 擋。
+規則 kind（三分；報告中以 I / M / C 顯示）：
 
-兩類規則：
+  independent ── 與引擎不共用算術、不重抄公式。
+                 例：「未自提 → pension_self == 0」、「meal_exempt → meal_deduction == 0」。
+                 演算法錯誤時會獨立發聲，是規則層最有保護力的本職。
 
-  SEMANTIC（語義不變式）
-    獨立斷言 ── 與引擎不共用算術、不重算金額。例：「未自提 → pension_self == 0」。
-    這類最有保護力，是規則層的本職。
+  mirror ──────  以與引擎相同的常數 / helper 重抄公式再 assert 相等。
+                 只能擋「engine 改動但 helper 沒同步」這類漂移，
+                 *無法* 攔截演算法本身錯誤（兩邊會一起錯、一起綠燈）。
+                 真正的金額守門靠 verified_cases 的 target 比對；mirror 是輔助。
 
-  STRUCTURAL（結構性契約）
-    重算引擎輸出來確認組成 ── 主要抓「engine 改動 helper 但忘了同步」。
-    與 case 數值斷言部分重疊，但能在新增員工沒有 case target 時提供保險。
+  composition ─ 合計關係（gross = Σ income；net = gross − deduction）。
+                 不重算個別公式，只驗組成。任何欄位被破壞、且未同步調整其他欄位
+                 都會被它擋下；mutation testing 的兜底守衛。
 
-新增規則流程：
-  1. 從 case 發現新語義／新欄位
-  2. 寫 applies + check
-  3. 跑全部 case 確認新規則不誤殺舊案例
-  4. coverage matrix 會在每次回歸自動印出觸發次數，零觸發即死規則。
+Coverage matrix（runtime）會：
+  1. 印每條規則 applies=True 的 case 數（零觸發 = 死規則或漏 case）。
+  2. 對每個 SalaryResult 數值欄位 +1 跑全部規則，列出 *非 composition* 的守衛。
+     若某欄位無任何 independent / mirror 守衛 → 只剩 sums_consistent 兜底。
+
+新增規則前先問：
+  - 它與引擎是否共用 helper / 常數？若是 → 是 mirror，問是否值得新增。
+  - 同一份保護是否 case 的 target 已能提供？若是 → 別新增。
+  - 它與既有規則會不會同時炸？若是 → 信號重疊。
+
+註：`verified_by` 名單已移除——這份資訊由 runtime coverage matrix derive，
+   不該再以靜態 metadata 重複表達。
 """
 
 from dataclasses import dataclass
@@ -40,15 +49,19 @@ from constants import (
 Predicate = Callable[[SalaryConfig, AttendanceRecord, SalaryResult], Optional[str]]
 Applies   = Callable[[SalaryConfig, AttendanceRecord, SalaryResult], bool]
 
+KIND_INDEPENDENT = "independent"
+KIND_MIRROR      = "mirror"
+KIND_COMPOSITION = "composition"
+KIND_TAGS = {KIND_INDEPENDENT: "I", KIND_MIRROR: "M", KIND_COMPOSITION: "C"}
+
 
 @dataclass
 class Rule:
     id: str
-    kind: str               # "semantic" | "structural"
+    kind: str               # independent | mirror | composition
     describe: str
     applies: Applies
     check: Predicate
-    verified_by: List[str]
 
 
 def _ok(cond: bool, msg: str) -> Optional[str]:
@@ -67,7 +80,7 @@ def _hourly_base(c: SalaryConfig) -> float:
 
 
 # ──────────────────────────────────────────────────────────────
-# SEMANTIC ── 與引擎獨立的語義斷言
+# INDEPENDENT ── 不重抄公式；演算法錯誤時會獨立發聲
 # ──────────────────────────────────────────────────────────────
 
 def _annual_leave_applies(c, a, r):
@@ -82,6 +95,7 @@ def _annual_leave_applies(c, a, r):
 
 
 def _annual_leave_no_deduct(c, a, r):
+    # 獨立斷言：特休不應改變全勤獎金、不應比例扣職務加給。
     return _ok(
         r.full_attendance_bonus == c.full_attendance_bonus
         and r.position_pay == _r(c.position_allowance),
@@ -95,9 +109,24 @@ def _pension_off_applies(c, a, r):
 
 
 def _pension_off(c, a, r):
+    # 獨立斷言：未自提 → 退休金自提欄為 0。不重算公式。
     return _ok(r.pension_self == 0,
                f"pension should be 0 when opted out: got {r.pension_self}")
 
+
+def _meal_exempt_applies(c, a, r):
+    return c.meal_exempt
+
+
+def _meal_exempt(c, a, r):
+    # 獨立斷言：meal_exempt → 便當扣款為 0，無論 meal_count 多少。
+    return _ok(r.meal_deduction == 0,
+               f"meal_exempt but meal_deduction={r.meal_deduction}")
+
+
+# ──────────────────────────────────────────────────────────────
+# MIRROR ── 重抄公式；擋 helper 漂移，不擋演算法錯誤
+# ──────────────────────────────────────────────────────────────
 
 def _pension_full_applies(c, a, r):
     if not c.pension_self_contribute:
@@ -110,6 +139,20 @@ def _pension_annual_leave_full(c, a, r):
     exp = _r(c.pension_base * PENSION_SELF_RATE)
     return _ok(r.pension_self == exp,
                f"pension with annual leave should be full ratio: got {r.pension_self}, exp {exp}")
+
+
+def _pension_partial_applies(c, a, r):
+    if not c.pension_self_contribute:
+        return False
+    effective = a.actual_work_days + a.annual_leave_days
+    return effective < a.work_days
+
+
+def _pension_partial_ratio(c, a, r):
+    effective = a.actual_work_days + a.annual_leave_days
+    exp = _r(c.pension_base * PENSION_SELF_RATE * (effective / 30))
+    return _ok(r.pension_self == exp,
+               f"pension partial ratio broken: got {r.pension_self}, exp {exp}")
 
 
 def _position_proration_applies(c, a, r):
@@ -125,15 +168,6 @@ def _position_proration(c, a, r):
                f"position_pay proration broken: got {r.position_pay}, exp {exp}")
 
 
-def _meal_exempt_applies(c, a, r):
-    return c.meal_exempt
-
-
-def _meal_exempt(c, a, r):
-    return _ok(r.meal_deduction == 0,
-               f"meal_exempt but meal_deduction={r.meal_deduction}")
-
-
 def _welfare_applies(c, a, r):
     return True   # 福利金每張單都該被驗（exempt 與 cap 兩邊都包含）
 
@@ -146,10 +180,6 @@ def _welfare_cap_and_exempt(c, a, r):
     return _ok(r.welfare_deduction == exp,
                f"welfare broken: got {r.welfare_deduction}, exp {exp}")
 
-
-# ──────────────────────────────────────────────────────────────
-# STRUCTURAL ── engine 組成契約（會重算金額，當 helper 漂移時擋下）
-# ──────────────────────────────────────────────────────────────
 
 def _base_duty_formula(c, a, r):
     return _ok(
@@ -201,7 +231,7 @@ def _daily_work_allowance(c, a, r):
 
 def _health_insurance_formula(c, a, r):
     # 引擎與規則共用 health_insurance_fee helper（單一 swap 點）。
-    # 等於斷言「engine 沒繞過 helper」，不是獨立公式驗證。
+    # 純 mirror — 擋 engine 沒呼叫 helper，不獨立驗證金額。
     # 健保局查表 vs 公式差 ±1 元 → verified_cases 以 tolerance_reason 處理。
     exp = health_insurance_fee(c)
     return _ok(r.health_insurance_fee == exp,
@@ -209,24 +239,9 @@ def _health_insurance_formula(c, a, r):
 
 
 def _labor_insurance_formula(c, a, r):
-    # 勞保 = 投保薪資 × 2.5%。免繳者 labor_insurance_base=0 → fee=0。
     exp = _r(c.labor_insurance_base * LABOR_INSURANCE_RATE)
     return _ok(r.labor_insurance_fee == exp,
                f"labor insurance broken: got {r.labor_insurance_fee}, exp {exp}")
-
-
-def _pension_partial_applies(c, a, r):
-    if not c.pension_self_contribute:
-        return False
-    effective = a.actual_work_days + a.annual_leave_days
-    return effective < a.work_days
-
-
-def _pension_partial_ratio(c, a, r):
-    effective = a.actual_work_days + a.annual_leave_days
-    exp = _r(c.pension_base * PENSION_SELF_RATE * (effective / 30))
-    return _ok(r.pension_self == exp,
-               f"pension partial ratio broken: got {r.pension_self}, exp {exp}")
 
 
 def _night_shift_applies(c, a, r):
@@ -261,6 +276,10 @@ def _festival_compose(c, a, r):
                f"festival_bonus broken: got {r.festival_bonus}, exp {exp}")
 
 
+# ──────────────────────────────────────────────────────────────
+# COMPOSITION ── 合計關係；mutation testing 的兜底
+# ──────────────────────────────────────────────────────────────
+
 def _sums_consistent(c, a, r):
     gross = (
         r.base_pay + r.duty_pay + r.other_pay + r.position_pay
@@ -285,82 +304,67 @@ def _sums_consistent(c, a, r):
 # 規則登記
 # ──────────────────────────────────────────────────────────────
 RULES: List[Rule] = [
-    # SEMANTIC
-    Rule("annual_leave_no_deduct", "semantic",
+    # INDEPENDENT
+    Rule("annual_leave_no_deduct", KIND_INDEPENDENT,
          "特休不扣全勤獎金、不扣職務加給",
-         _annual_leave_applies, _annual_leave_no_deduct,
-         ["林義明#18"]),
-    Rule("pension_off", "semantic",
+         _annual_leave_applies, _annual_leave_no_deduct),
+    Rule("pension_off", KIND_INDEPENDENT,
          "未自提退休金 → pension_self == 0",
-         _pension_off_applies, _pension_off,
-         ["劉英美#39"]),
-    Rule("pension_annual_leave_full", "semantic",
-         "退休金自提：特休視為出勤，effective_days≥work_days → ratio=1.0",
-         _pension_full_applies, _pension_annual_leave_full,
-         ["許清輝#10"]),
-    Rule("pension_partial_ratio", "semantic",
-         "退休金自提：effective_days<work_days → ratio=effective/30",
-         _pension_partial_applies, _pension_partial_ratio,
-         []),  # 尚無 case；若新增有事/病/無薪假的 pension 自提者會自動觸發
-    Rule("position_proration", "semantic",
-         "事假/病假/無薪假按 work_days 比例扣職務加給（特休不扣）",
-         _position_proration_applies, _position_proration,
-         []),  # 尚無 case；簡宜君 #17 補資料後會觸發
-    Rule("meal_exempt", "semantic",
+         _pension_off_applies, _pension_off),
+    Rule("meal_exempt", KIND_INDEPENDENT,
          "meal_exempt=True 永不扣便當費，無論 meal_count 多少",
-         _meal_exempt_applies, _meal_exempt,
-         ["陳姿惠#14", "鄧志展#11", "莊明燦#19"]),
-    Rule("welfare_cap_and_exempt", "semantic",
-         "福利金 = min(應領 × 1%, 350)；welfare_exempt → 0",
-         _welfare_applies, _welfare_cap_and_exempt,
-         ["陳沛思#16"]),
+         _meal_exempt_applies, _meal_exempt),
 
-    # STRUCTURAL
-    Rule("base_duty_formula", "structural",
+    # MIRROR
+    Rule("pension_annual_leave_full", KIND_MIRROR,
+         "退休金自提：特休視為出勤，effective_days≥work_days → ratio=1.0",
+         _pension_full_applies, _pension_annual_leave_full),
+    Rule("pension_partial_ratio", KIND_MIRROR,
+         "退休金自提：effective_days<work_days → ratio=effective/30",
+         _pension_partial_applies, _pension_partial_ratio),
+    Rule("position_proration", KIND_MIRROR,
+         "事假/病假/無薪假按 work_days 比例扣職務加給（特休不扣）",
+         _position_proration_applies, _position_proration),
+    Rule("welfare_cap_and_exempt", KIND_MIRROR,
+         "福利金 = min(應領 × 1%, 350)；welfare_exempt → 0",
+         _welfare_applies, _welfare_cap_and_exempt),
+    Rule("base_duty_formula", KIND_MIRROR,
          "本薪/職務津貼 = 月額 ÷ 30 × 曆日，不受任何請假影響",
-         _always, _base_duty_formula,
-         ["許柏凱#13", "林義明#18", "劉英美#39"]),
-    Rule("overtime_base_240", "structural",
+         _always, _base_duty_formula),
+    Rule("overtime_base_240", KIND_MIRROR,
          "加班時薪 = (本薪+職務津貼+其他加給固定+全勤+職務加給) ÷ 240",
-         _overtime_applies, _overtime_base_240,
-         ["鄧志展#11"]),
-    Rule("holiday_ot_rounding", "structural",
+         _overtime_applies, _overtime_base_240),
+    Rule("holiday_ot_rounding", KIND_MIRROR,
          "假日加班費 = _r(hourly × (1.33×前段時數+1.66×後段時數) × 天數)",
-         _holiday_ot_applies, _holiday_ot_rounding,
-         ["鄧志展#11"]),
-    Rule("daily_work_allowance", "structural",
+         _holiday_ot_applies, _holiday_ot_rounding),
+    Rule("daily_work_allowance", KIND_MIRROR,
          "其他加給 = 固定加給 + (actual + holiday_ot) × dwa",
-         _always, _daily_work_allowance,
-         ["王靖銘#5", "許柏凱#13"]),
-    Rule("health_insurance_formula", "structural",
+         _always, _daily_work_allowance),
+    Rule("health_insurance_formula", KIND_MIRROR,
          "健保費 = 投保薪資 × 5.17% × (1+眷屬) × 30%（查表可能差 ±1 元）",
-         _always, _health_insurance_formula,
-         ["鄧志展#11", "許清輝#10"]),
-    Rule("labor_insurance_formula", "structural",
+         _always, _health_insurance_formula),
+    Rule("labor_insurance_formula", KIND_MIRROR,
          "勞保費 = 投保薪資 × 2.5%；免繳者 base=0 → fee=0",
-         _always, _labor_insurance_formula,
-         ["王靖銘#5", "莊明燦#19"]),
-    Rule("night_shift_compose", "structural",
+         _always, _labor_insurance_formula),
+    Rule("night_shift_compose", KIND_MIRROR,
          "夜班津貼 = night_shift_daily × (actual + holiday_ot + sunday_ot)",
-         _night_shift_applies, _night_shift_compose,
-         ["莊志成#45"]),
-    Rule("meal_allowance_compose", "structural",
+         _night_shift_applies, _night_shift_compose),
+    Rule("meal_allowance_compose", KIND_MIRROR,
          "伙食津貼 = meal_allowance_daily × (actual + holiday_ot + sunday_ot)",
-         _meal_allowance_applies, _meal_allowance_compose,
-         ["莊志成#45"]),
-    Rule("festival_compose", "structural",
+         _meal_allowance_applies, _meal_allowance_compose),
+    Rule("festival_compose", KIND_MIRROR,
          "節金 = duty_allowance（has_festival_bonus=True 時）",
-         _festival_applies, _festival_compose,
-         []),  # 尚無 case 觸發 — coverage matrix 會自動標 zero-trigger
-    Rule("sums_consistent", "structural",
+         _festival_applies, _festival_compose),
+
+    # COMPOSITION
+    Rule("sums_consistent", KIND_COMPOSITION,
          "gross = Σ 收入；total_deduction = Σ 扣除；net = gross − total_deduction",
-         _always, _sums_consistent,
-         ["*"]),
+         _always, _sums_consistent),
 ]
 
 
 # ──────────────────────────────────────────────────────────────
-# 執行 / 驗證 / 自我檢查
+# 執行 / 驗證
 # ──────────────────────────────────────────────────────────────
 @dataclass
 class RuleOutcome:
@@ -390,21 +394,3 @@ def check_all(config: SalaryConfig, attendance: AttendanceRecord,
         for o in evaluate(config, attendance, result)
         if o.applied and o.violation
     ]
-
-
-def validate_verified_by(known_case_names: set) -> List[str]:
-    """
-    啟動時呼叫；驗證每條 rule 的 verified_by 名單都是已存在的 case 名稱
-    （或 "*" 代表通用）。回傳違規訊息列表，空即通過。
-
-    name 格式: "<姓名>" 或 "<姓名>#<id>"，比對前者部分。
-    """
-    problems = []
-    for rule in RULES:
-        for label in rule.verified_by:
-            if label == "*":
-                continue
-            name = label.split("#", 1)[0]
-            if name not in known_case_names:
-                problems.append(f"rule '{rule.id}' verified_by '{label}': 未知 case '{name}'")
-    return problems

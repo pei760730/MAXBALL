@@ -1,17 +1,18 @@
 """
 已驗證薪資案例（回歸測試）+ 規則 coverage 自我檢查
 =================================================
-每個 Case = 一位員工的當月出勤 + 實際薪資（截圖）+ tolerance 歸因。
+單一守門進入點：`python verified_cases.py`
 
-執行：
-  python verified_cases.py
+跑完依序檢查：
+  1. boundary self-test（不依賴 Google Sheets）
+  2. tolerance 歸因驗證（每筆 tolerance>0 必須對得回 TOLERANCE_REASONS 的 swap 點）
+  3. 17 個 case：金額 vs target、規則 0 破損
+  4. Coverage matrix（runtime derived）：
+     a. 每條規則 applies=True 的 case 數 + I/M/C 標籤；零觸發 = 死規則或漏 case
+     b. 每個 SalaryResult 數值欄位的 mutation-based 守衛清單
+        （只剩 sums_consistent 的欄位 = 真實覆蓋缺口）
 
-跑完會印三件事：
-  1. 每個 case 的金額對齊（vs target）+ 該 case 觸發的規則違規
-  2. Coverage matrix：每條規則被觸發幾次、零觸發的規則有哪些
-  3. Result 欄位中「無專屬公式規則守護」的欄位（只受 sums_consistent 約束的）
-
-若任何 case 違規 / 任一規則破損 / verified_by 名單漂移 → exit 1。
+任何環節失敗 → exit 1。
 
 新增案例流程：
   1. 從打卡紀錄讀取出勤資料
@@ -19,19 +20,23 @@
   3. 與實際薪資比對，必要時設定 tolerance + tolerance_reason
   4. 通過後加入 CASES 清單
 
-新增 tolerance>0 必須在 TOLERANCE_REASONS 登記 swap 點，否則啟動驗證會 raise。
+新增 tolerance>0 必須在 TOLERANCE_REASONS 登記 swap 點，否則啟動驗證會 fail。
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, fields
 from typing import Optional
 
 from salary_calculator import calculate_salary, AttendanceRecord, SalaryResult
 from employee_configs import CONFIGS_BY_NAME
-from rules import RULES, evaluate, validate_verified_by
+from rules import RULES, evaluate, KIND_COMPOSITION, KIND_TAGS
+import boundary
 
 
 # ──────────────────────────────────────────────────────────────
 # Tolerance reasons：每筆 tolerance > 0 必須對得回一個 swap 點
+#   接健保表後（salary_calculator.health_insurance_fee 改查表）原本陳佩欣 #16 的
+#   tolerance=1 已收掉，目前 17/17 全部 exact，本字典為空。
+#   未來若再出現 tolerance>0 的 case，必須先在這裡登記 swap 點，否則啟動驗證會 fail。
 # ──────────────────────────────────────────────────────────────
 TOLERANCE_REASONS = {}
 
@@ -45,37 +50,6 @@ class Case:
     notes: str = ""
     tolerance: int = 0
     tolerance_reason: Optional[str] = None
-
-
-# ──────────────────────────────────────────────────────────────
-# 結果欄位 → 守護它的「公式規則」對照
-#   個別收入/扣除欄位列出 *專屬公式規則*（不列 sums_consistent，否則所有欄位都會被它兜底，
-#   失去「找出無公式守護欄位」的訊號）。
-#   gross_income / total_deduction / net_salary 三個合計欄位的公式 *本身就是* sums_consistent，
-#   所以該規則就是它們的專屬公式，列出來。
-#   未列任何規則（[]）的欄位 → coverage matrix 末段自動標記為「無公式規則守護」。
-# ──────────────────────────────────────────────────────────────
-FIELD_FORMULA_RULES = {
-    "base_pay":               ["base_duty_formula"],
-    "duty_pay":               ["base_duty_formula"],
-    "other_pay":              ["daily_work_allowance"],
-    "position_pay":           ["annual_leave_no_deduct", "position_proration"],
-    "full_attendance_bonus":  ["annual_leave_no_deduct"],          # 條件覆蓋
-    "holiday_overtime_pay":   ["holiday_ot_rounding"],
-    "overtime_pay_1":         ["overtime_base_240"],
-    "overtime_pay_2":         ["overtime_base_240"],
-    "night_shift_pay":        ["night_shift_compose"],
-    "meal_allowance_pay":     ["meal_allowance_compose"],
-    "festival_bonus":         ["festival_compose"],
-    "labor_insurance_fee":    ["labor_insurance_formula"],
-    "health_insurance_fee":   ["health_insurance_formula"],
-    "pension_self":           ["pension_off", "pension_annual_leave_full", "pension_partial_ratio"],
-    "welfare_deduction":      ["welfare_cap_and_exempt"],
-    "meal_deduction":         ["meal_exempt"],                     # 條件覆蓋
-    "gross_income":           ["sums_consistent"],
-    "total_deduction":        ["sums_consistent"],
-    "net_salary":             ["sums_consistent"],
-}
 
 
 # ──────────────────────────────────────────────────────────────
@@ -255,7 +229,7 @@ CASES: list[Case] = [
             "annual_leave_days": 1.0,
             "meal_count": 13,
         },
-        notes="特休1天, duty=2000, dep=1",
+        notes="特休1天, duty=2000, dep=1（健保接表後 exact）",
     ),
     Case(
         name="吳慧娟",
@@ -287,7 +261,7 @@ CASES: list[Case] = [
 
 
 # ──────────────────────────────────────────────────────────────
-# 啟動驗證：tolerance 歸因 + verified_by 名單漂移
+# 啟動驗證
 # ──────────────────────────────────────────────────────────────
 def _validate_tolerances() -> list[str]:
     problems = []
@@ -307,11 +281,40 @@ def _validate_tolerances() -> list[str]:
     return problems
 
 
-def _startup_checks() -> list[str]:
-    problems = []
-    problems += _validate_tolerances()
-    problems += validate_verified_by({c.name for c in CASES})
-    return problems
+# ──────────────────────────────────────────────────────────────
+# Mutation-based field guard derivation
+#   對每個 SalaryResult 數值欄位 +1，跑所有規則；
+#   聚合「哪條規則攔下了這個欄位的擾動」。
+#   composition (sums_consistent) 會攔幾乎所有 mutation；
+#   只有 composition 攔到的欄位 = 真實覆蓋缺口。
+# ──────────────────────────────────────────────────────────────
+def _numeric_result_fields() -> list[str]:
+    return [f.name for f in fields(SalaryResult) if f.name != "name"]
+
+
+def _derive_field_guards() -> dict[str, set[str]]:
+    """回傳 {field_name -> set(rule_id) that catches +1 mutation in any case}."""
+    guards: dict[str, set[str]] = {f: set() for f in _numeric_result_fields()}
+    for case in CASES:
+        config = CONFIGS_BY_NAME[case.name]
+        att = AttendanceRecord(
+            year=2026, month=int(case.month.split("-")[1]), **case.attendance,
+        )
+        baseline = calculate_salary(config, att)
+        baseline_dict = baseline.__dict__.copy()
+
+        for fname in _numeric_result_fields():
+            current = baseline_dict[fname]
+            if not isinstance(current, (int, float)):
+                continue
+            mutated = SalaryResult(**baseline_dict)
+            setattr(mutated, fname, current + 1)
+            for o in evaluate(config, att, mutated):
+                if o.applied and o.violation:
+                    guards[fname].add(o.rule_id)
+            # 還原（這個 dict 是 copy 但保險起見）
+            mutated = None
+    return guards
 
 
 # ──────────────────────────────────────────────────────────────
@@ -319,23 +322,31 @@ def _startup_checks() -> list[str]:
 # ──────────────────────────────────────────────────────────────
 def run_all(verbose: bool = False) -> bool:
     """
-    跑所有 case + 規則不變式 + coverage matrix。
-    回傳：全部 case 通過 AND 無任何規則破損 AND 啟動驗證通過。
+    跑所有 case + 規則不變式 + coverage matrix + boundary self-test。
+    回傳：boundary OK AND 啟動驗證 OK AND 全部 case 通過 AND 無任何規則破損。
     """
+    # ── boundary self-test ──
+    print("[boundary]")
+    try:
+        boundary.selftest()
+    except AssertionError as e:
+        print(f"  ✗ {e}")
+        return False
+
     # ── 啟動驗證 ──
-    startup = _startup_checks()
+    startup = _validate_tolerances()
     if startup:
-        print("啟動驗證失敗：")
+        print("\n啟動驗證失敗：")
         for p in startup:
             print(f"  ✗ {p}")
         return False
 
+    print()
     passed = 0
     failed = 0
     rule_violations = 0
     rule_apply_count: dict[str, int] = {r.id: 0 for r in RULES}
     rule_apply_cases: dict[str, list[str]] = {r.id: [] for r in RULES}
-    case_rule_count: dict[str, int] = {}
 
     for case in CASES:
         config = CONFIGS_BY_NAME[case.name]
@@ -357,11 +368,10 @@ def run_all(verbose: bool = False) -> bool:
         ok = value_ok and rule_ok
 
         # coverage 累積
-        applied_here = [o.rule_id for o in outcomes if o.applied]
-        case_rule_count[case.name] = len(applied_here)
-        for rid in applied_here:
-            rule_apply_count[rid] += 1
-            rule_apply_cases[rid].append(case.name)
+        for o in outcomes:
+            if o.applied:
+                rule_apply_count[o.rule_id] += 1
+                rule_apply_cases[o.rule_id].append(case.name)
 
         if ok:
             passed += 1
@@ -386,33 +396,48 @@ def run_all(verbose: bool = False) -> bool:
     print(f"\n  結果: {passed} 通過, {failed} 失敗 (共 {len(CASES)} 案例)")
     print(f"  規則: {len(RULES)} 條, 破損 {rule_violations} 次")
 
-    # ── Coverage matrix ──
+    # ── Coverage matrix：規則觸發次數 ──
     print(f"\n{'─'*50}")
     print("  Coverage matrix")
     print(f"{'─'*50}")
 
-    print("\n  規則觸發次數（applies=True 的 case 數）:")
+    print("\n  規則觸發次數（applies=True 的 case 數，I=independent / M=mirror / C=composition）:")
     zero_trigger = []
     for rule in RULES:
         cnt = rule_apply_count[rule.id]
-        kind_tag = "S" if rule.kind == "semantic" else "T"
+        tag = KIND_TAGS[rule.kind]
         mark = "  " if cnt > 0 else "⚠ "
         if cnt == 0:
             zero_trigger.append(rule.id)
         sample = ", ".join(rule_apply_cases[rule.id][:3])
         if len(rule_apply_cases[rule.id]) > 3:
             sample += f", +{len(rule_apply_cases[rule.id]) - 3}"
-        print(f"    {mark}[{kind_tag}] {rule.id:<32} {cnt:2d} / {len(CASES)}  {sample}")
+        print(f"    {mark}[{tag}] {rule.id:<32} {cnt:2d} / {len(CASES)}  {sample}")
 
     if zero_trigger:
         print(f"\n  ⚠ 零觸發規則（無 case 證明它有作用）: {', '.join(zero_trigger)}")
         print("     → 該規則可能是死規則，或缺對應 case；ISSUES.md 候選項。")
 
-    # ── 結果欄位無專屬公式規則 ──
-    uncovered_fields = [f for f, rules_list in FIELD_FORMULA_RULES.items() if not rules_list]
-    if uncovered_fields:
-        print(f"\n  ⚠ 無公式規則的欄位（僅受 sums_consistent 兜底）: {', '.join(uncovered_fields)}")
-        print("     → 若該欄位算錯且金額仍能配平，目前無法被獨立規則攔下。")
+    # ── Coverage matrix：欄位守衛（mutation-based） ──
+    guards = _derive_field_guards()
+    composition_only = []
+    print("\n  欄位守衛（result 欄位 +1 時，會被攔下的非 composition 規則）:")
+    for fname in _numeric_result_fields():
+        non_comp = sorted(
+            rid for rid in guards[fname]
+            if next((r.kind for r in RULES if r.id == rid), None) != KIND_COMPOSITION
+        )
+        if non_comp:
+            print(f"    {fname:<24} {', '.join(non_comp)}")
+        else:
+            comp = sorted(guards[fname])
+            tag = "(無人攔)" if not comp else f"(僅 {', '.join(comp)})"
+            print(f"  ⚠ {fname:<24} {tag}")
+            composition_only.append(fname)
+
+    if composition_only:
+        print(f"\n  ⚠ 僅 composition 兜底的欄位: {', '.join(composition_only)}")
+        print("     → 這些欄位若算錯且被另一欄位以反向誤差抵銷，無獨立規則攔下。")
 
     print()
     return failed == 0 and rule_violations == 0
@@ -420,7 +445,7 @@ def run_all(verbose: bool = False) -> bool:
 
 if __name__ == "__main__":
     print("=" * 50)
-    print("  薪資計算引擎 — 回歸測試")
+    print("  薪資計算引擎 — 回歸測試（單一守門進入點）")
     print("=" * 50)
     success = run_all(verbose=True)
     if not success:
