@@ -33,12 +33,7 @@ from rules import RULES, evaluate, validate_verified_by
 # ──────────────────────────────────────────────────────────────
 # Tolerance reasons：每筆 tolerance > 0 必須對得回一個 swap 點
 # ──────────────────────────────────────────────────────────────
-TOLERANCE_REASONS = {
-    "health_insurance_table_lookup": (
-        "健保局保險費分擔表 vs 5.17%×(1+眷屬)×30% 公式差異（非捨入）。"
-        "Swap 點：salary_calculator.health_insurance_fee；接表後 tolerance 應收掉。"
-    ),
-}
+TOLERANCE_REASONS = {}
 
 
 @dataclass
@@ -251,8 +246,6 @@ CASES: list[Case] = [
         name="陳佩欣",
         month="2026-03",
         target=27888,
-        tolerance=1,
-        tolerance_reason="health_insurance_table_lookup",
         attendance={
             "calendar_days": 31, "work_days": 22,
             "actual_work_days": 21.0,

@@ -2,7 +2,7 @@
 
 19 位員工的月薪資計算與 Google Sheets 整合。
 **員工設定由 Python 維護**（版本控管、單一權威源），**出勤 / 便當 / 結算** 走 Google Sheets。
-核心是純函數引擎 + 17 條可執行規則不變式 + coverage matrix，所有改動由 17 個真實薪資截圖回歸測試守門。
+核心是純函數引擎 + 17 條可執行規則不變式 + coverage matrix，所有改動由 17 個真實薪資截圖回歸測試守門（且已由 CI 強制）。
 
 ---
 
@@ -57,7 +57,14 @@ python main_sync.py --year 2026 --month 3
 python main_sync.py --year 2026 --month 3 --dry-run
 ```
 
-CI 上用 `.github/workflows/sync_sheets.yml` 的 workflow_dispatch 觸發，手動輸入 `year` / `month` / `dry_run`；先跑回歸再寫回。
+CI 會在 push 到 `main` 與所有 PR 自動執行 `.github/workflows/regression.yml`：
+
+```bash
+python verified_cases.py
+```
+
+exit code 即守門判準；這使 README 內「回歸測試守門」成為可驗證事實。  
+`.github/workflows/sync_sheets.yml` 仍保留 workflow_dispatch 供月結算手動執行。
 
 ---
 
@@ -66,7 +73,7 @@ CI 上用 `.github/workflows/sync_sheets.yml` 的 workflow_dispatch 觸發，手
 ```
 MAXBALL/
 ├── constants.py           # 費率 / 倍率 / 上限（唯一定義處，封版）
-├── salary_calculator.py   # 純函數引擎 + _r() + health_insurance_fee helper
+├── salary_calculator.py   # 純函數引擎 + _r() + health_insurance_fee（健保查表）
 ├── rules.py               # 17 條規則（SEMANTIC × 7 + STRUCTURAL × 10），每條含 applies/check
 ├── employee_configs.py    # 員工 SalaryConfig（Python 單一權威源）
 ├── verified_cases.py      # 17 個回歸案例（Case 結構 + tolerance_reason）+ coverage matrix
@@ -76,6 +83,7 @@ MAXBALL/
 ├── sheets_client.py       # gspread 薄封裝
 ├── ISSUES.md              # narrative：未驗證個案 + 候選規則（結構化訊號改由 coverage matrix 印）
 └── .github/workflows/
+    ├── regression.yml     # 回歸守門（push main + 所有 PR，跑 verified_cases.py）
     ├── sync_sheets.yml    # 月結算（workflow_dispatch + year/month/dry_run）
     └── read_sheets.yml    # 拉 Sheets snapshot（workflow_dispatch）
 ```
@@ -92,18 +100,17 @@ MAXBALL/
 | 規則層自我健身 | `coverage matrix` 每次回歸印觸發次數；零觸發即死規則或漏 case |
 | Tolerance 必須歸因 | 任何 `tolerance > 0` 必對得回 `TOLERANCE_REASONS` 的 swap 點；接表後自動失敗提醒收掉 |
 | 捨入策略明確 | `_r()` 使用 `ROUND_HALF_UP`（台灣會計慣例），非 Python 內建銀行家 |
-| 健保查表 swap 點 | `salary_calculator.health_insurance_fee(config)`；未來接健保局表只改此函數 |
+| 健保查表單點 | `salary_calculator.health_insurance_fee(config)` 以健保局分擔表查表 |
 | Boundary 獨立可測 | `boundary.py` 自帶 self-test，不依賴 Google Sheets |
-| 邊界 fail loud | Sheet header 漂移 → raise；姓名 typo / 值域異常 → 中止，不 silently 賠錢 |
-| CI 契約收斂 | `workflow_dispatch` + year/month/dry_run，不再 poke-file 觸發 |
+| 邊界 fail loud | Sheet header 漂移 / 便當未知標記 → raise；姓名 typo / 值域異常 → 中止 |
+| CI 回歸守門 | `regression.yml` 強制 `python verified_cases.py`，exit code 為唯一判準 |
 
 ---
 
 ## 驗證狀態
 
-**17/17 通過**（2026 年 3 月）
-- 16 筆 exact
-- 1 筆 tolerance=1：陳佩欣 #16（歸因 `health_insurance_table_lookup`；swap 點：`salary_calculator.health_insurance_fee`）
+**17/17 通過（全部 exact）**（2026 年 3 月）
+- 17 筆 exact（diff=0）
 
 **17 條規則 0 破損**
 - SEMANTIC（7）：`annual_leave_no_deduct` / `pension_off` / `pension_annual_leave_full` / `pension_partial_ratio` / `position_proration` / `meal_exempt` / `welfare_cap_and_exempt`

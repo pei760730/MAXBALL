@@ -12,7 +12,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from constants import (
     OVERTIME_RATE_FRONT, OVERTIME_RATE_BACK, OVERTIME_DIVISOR,
     HOLIDAY_OT_FRONT_HOURS, HOLIDAY_OT_BACK_HOURS,
-    LABOR_INSURANCE_RATE, HEALTH_INSURANCE_RATE, HEALTH_EMPLOYEE_SHARE,
+    LABOR_INSURANCE_RATE,
     PENSION_SELF_RATE, WELFARE_RATE, WELFARE_CAP,
     FULL_ATTENDANCE_DEDUCT, MEAL_PRICE,
 )
@@ -23,17 +23,32 @@ def _r(x: float) -> int:
     return int(Decimal(str(x)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
+HEALTH_INSURANCE_SELF_FEE_TABLE = {
+    # 健保局保險費分擔表（第 1 類，負擔比率 30%）— 2026 現行級距（本專案使用到的投保金額）
+    29_500: 458,
+    30_300: 470,
+    31_800: 493,
+    33_300: 516,
+    34_800: 540,
+    38_200: 592,
+    42_000: 651,
+    45_800: 710,
+    55_400: 859,
+    60_800: 943,
+}
+
+
 def health_insurance_fee(config: "SalaryConfig") -> int:
     """
-    員工自付健保費（公式法）= 投保薪資 × 5.17% × (1+眷屬) × 30%。
-
-    未來若要接健保局「保險費分擔表」查表，只需替換本函數實作；
-    rules.py::health_insurance_formula 會跟著走，不會漂移。
+    員工自付健保費（查表）= 健保局保險費分擔表「本人」金額 × (1 + 眷屬數)。
+    眷屬費與本人同額；本專案僅處理員工設定裡會出現的投保金額級距。
     """
-    return _r(
-        config.health_insurance_base * HEALTH_INSURANCE_RATE
-        * (1 + config.health_dependents) * HEALTH_EMPLOYEE_SHARE
-    )
+    base = _r(config.health_insurance_base)
+    if base not in HEALTH_INSURANCE_SELF_FEE_TABLE:
+        raise ValueError(
+            f"health_insurance_base={base} 未在健保分擔表中，請先補表。"
+        )
+    return HEALTH_INSURANCE_SELF_FEE_TABLE[base] * (1 + config.health_dependents)
 
 
 # ──────────────────────────────────────────────
@@ -153,7 +168,7 @@ def calculate_salary(config: SalaryConfig, attendance: AttendanceRecord) -> Sala
       收入: base÷30×曆日, duty÷30×曆日, other+dwa×出勤天,
             position(事假/病假比例扣), 全勤(每次請假-300),
             假日加班日費, 延時加班(前段1.33/後段1.66), 節金
-      扣除: 勞保2.5%, 健保5.17%×(1+眷屬)×30%, 退休金6%,
+      扣除: 勞保2.5%, 健保查表(本人×(1+眷屬)), 退休金6%,
             福利min(1%,350), 便當份數×15
     """
     r = SalaryResult(name=config.name)

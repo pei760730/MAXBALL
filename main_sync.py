@@ -23,7 +23,7 @@ from sheets_client import connect, read_all, write_rows
 from salary_calculator import SalaryConfig, AttendanceRecord, calculate_salary, SalaryResult
 from employee_configs import EMPLOYEE_CONFIGS
 from boundary import (
-    ATTENDANCE_HEADER_KEYWORDS, validate_header, validate_attendance, is_fatal,
+    ATTENDANCE_HEADER_KEYWORDS, validate_header, validate_attendance, parse_meal_marker, is_fatal,
 )
 
 # ──────────────────────────────────────────────────────────────
@@ -83,7 +83,8 @@ def load_attendance(ws, year: int, month: int) -> dict[str, AttendanceRecord]:
 def load_meal_counts(ws) -> dict[str, int]:
     """
     讀取「便當訂購」工作表，回傳 {姓名: 便當份數}。
-    第 A 欄為姓名，B~AF 為每天標記（V/素/X），最後欄或自動加總。
+    第 A 欄為姓名，B~AF 為每天標記（只接受 V / 素；X/空白視為 0）。
+    未知非空字元會 fail loud（raise ValueError），避免 silently 視為 0。
     """
     rows = read_all(ws)
     counts = {}
@@ -92,10 +93,8 @@ def load_meal_counts(ws) -> dict[str, int]:
             continue
         name = row[0].strip()
         count = 0
-        for cell in row[1:]:
-            v = cell.strip().lower()
-            if v in ("v", "✓", "√", "ˇ", "素", "s"):
-                count += 1
+        for idx, cell in enumerate(row[1:], start=2):  # B 欄=2
+            count += parse_meal_marker(name, idx, str(cell))
         counts[name] = count
     return counts
 
