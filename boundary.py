@@ -21,6 +21,8 @@ ATTENDANCE_HEADER_KEYWORDS = [
     "1.33", "1.66", "事假", "病假", "無薪", "特休", "全勤", "節金",
 ]
 
+MEAL_MARKERS = {"V", "素"}
+
 
 def _col_letter(idx: int) -> str:
     # 0→A, 1→B, ..., 25→Z, 26→col27 略
@@ -80,6 +82,28 @@ def validate_attendance(configs: list, attendances: dict) -> list[str]:
             messages.append(f"[錯誤] {name} 假日/週日加班日為負數")
 
     return messages
+
+
+def parse_meal_marker(name: str, col_idx_1based: int, raw: str) -> int:
+    """
+    便當標記 boundary：
+      - 空白 / X / x / - / 0 => 0
+      - V / v / 素 => 1
+      - 其他非空字元 => raise ValueError（fail loud）
+    """
+    value = (raw or "").strip()
+    if value == "":
+        return 0
+
+    normalized = value.upper()
+    if normalized in MEAL_MARKERS:
+        return 1
+    if normalized in {"X", "-", "0"}:
+        return 0
+
+    raise ValueError(
+        f"便當訂購: 未知標記 '{value}'（姓名={name}, 第{col_idx_1based}欄）"
+    )
 
 
 def is_fatal(messages: list[str]) -> bool:
@@ -149,6 +173,17 @@ def _selftest():
         {"測試員": AttendanceRecord(2026, 3, 31, 22, 22.0)},
     )
     assert msgs == [], f"全勤應 0 訊息: {msgs}"
+
+    # ── meal marker：未知字元應 fail loud ──
+    assert parse_meal_marker("測試員", 2, "V") == 1
+    assert parse_meal_marker("測試員", 3, "素") == 1
+    assert parse_meal_marker("測試員", 4, "x") == 0
+    try:
+        parse_meal_marker("測試員", 5, "✓")
+        raise AssertionError("未知標記應 raise")
+    except ValueError as e:
+        assert "測試員" in str(e)
+        assert "第5欄" in str(e)
 
     print("boundary self-test: all pass")
 
