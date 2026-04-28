@@ -230,9 +230,8 @@ def _daily_work_allowance(c, a, r):
 
 
 def _health_insurance_formula(c, a, r):
-    # 引擎與規則共用 health_insurance_fee helper（單一 swap 點）。
+    # 引擎與規則共用 health_insurance_fee helper（單一 swap 點，現為健保局分擔表查表）。
     # 純 mirror — 擋 engine 沒呼叫 helper，不獨立驗證金額。
-    # 健保局查表 vs 公式差 ±1 元 → verified_cases 以 tolerance_reason 處理。
     exp = health_insurance_fee(c)
     return _ok(r.health_insurance_fee == exp,
                f"health insurance broken: got {r.health_insurance_fee}, exp {exp}")
@@ -341,7 +340,7 @@ RULES: List[Rule] = [
          "其他加給 = 固定加給 + (actual + holiday_ot) × dwa",
          _always, _daily_work_allowance),
     Rule("health_insurance_formula", KIND_MIRROR,
-         "健保費 = 投保薪資 × 5.17% × (1+眷屬) × 30%（查表可能差 ±1 元）",
+         "健保費 = 健保局分擔表[投保薪資] × (1+眷屬)；engine 必須走 health_insurance_fee helper",
          _always, _health_insurance_formula),
     Rule("labor_insurance_formula", KIND_MIRROR,
          "勞保費 = 投保薪資 × 2.5%；免繳者 base=0 → fee=0",

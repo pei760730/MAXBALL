@@ -11,8 +11,8 @@ OVERTIME_RATE_BACK  = 1.66      # 後段加班（平日第3小時起 / 假日3-8
 
 # ── 保險費率（員工自付部分）──
 LABOR_INSURANCE_RATE  = 0.0250   # 勞保 2.5%（總12.5% × 員工20%）
-HEALTH_INSURANCE_RATE = 0.0517   # 健保費率 5.17%
-HEALTH_EMPLOYEE_SHARE = 0.30     # 健保員工負擔 30%
+# 健保改用健保局分擔表查表（salary_calculator.HEALTH_INSURANCE_SELF_FEE_TABLE），
+# 不再用「5.17% × (1+眷屬) × 30%」公式法；費率常數隨之退役。
 PENSION_SELF_RATE     = 0.06     # 退休金自提 6%
 
 # ── 福利金 ──

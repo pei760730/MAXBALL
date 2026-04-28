@@ -185,7 +185,7 @@ def selftest():
         assert "測試員" in str(e)
         assert "第5欄" in str(e)
 
-    print("boundary self-test: all pass")
+    print("  ✓ boundary self-test: all pass")
 
 
 if __name__ == "__main__":
