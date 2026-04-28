@@ -89,7 +89,7 @@ CASES: list[Case] = [
             "annual_leave_days": 1.0,
             "meal_count": 21,
         },
-        notes="特休1天, 加班18.5hr全前段, pension=True ratio=1.0（ROUND_HALF_UP 已修正）",
+        notes="特休1天, 加班18.5hr全前段, pension=True ratio=1.0",
     ),
     Case(
         name="許柏凱",
@@ -217,7 +217,7 @@ CASES: list[Case] = [
             "annual_leave_days": 3.5,
             "meal_count": 18,
         },
-        notes="特休3.5天, base=16350, dep=0（ROUND_HALF_UP 已修正）",
+        notes="特休3.5天, base=16350, dep=0",
     ),
     Case(
         name="陳佩欣",
@@ -241,7 +241,7 @@ CASES: list[Case] = [
             "annual_leave_days": 3.0,
             "meal_count": 0,
         },
-        notes="特休3天. 截圖實領31975含特殊扣588(勞退健保自付)（ROUND_HALF_UP 已修正）",
+        notes="特休3天. 截圖實領31975含特殊扣588(勞退健保自付)",
     ),
     Case(
         name="莊志成",

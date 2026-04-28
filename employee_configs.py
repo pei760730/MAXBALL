@@ -277,7 +277,7 @@ EMPLOYEE_CONFIGS: list[SalaryConfig] = [
         full_attendance_bonus=1_600,
         labor_insurance_base=42_000,
         health_insurance_base=42_000,
-        health_dependents=0,            # 截圖確認：健保651=42000×5.17%×1×30%
+        health_dependents=0,            # 截圖確認：dep=0；健保查表 42000 → 651
         pension_base=42_000,
         pension_self_contribute=True,
         daily_work_allowance=245,       # 85+50+50+60
